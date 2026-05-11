@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subtitle-transcriber"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.111.0",
+  "uvicorn[standard]>=0.30.0",
+  "faster-whisper>=1.0.0",
+  "boto3>=1.34.0",
+  "httpx>=0.27.0",
+  "python-dotenv>=1.0.0",
+]

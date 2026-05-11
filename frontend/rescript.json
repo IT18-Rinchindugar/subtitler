@@ -1,0 +1,37 @@
+{
+  "name": "subtitler",
+  "sources": [
+    {
+      "dir": "src",
+      "subdirs": true
+    },
+    { "dir": "tests", "subdirs": true, "type": "dev" }
+  ],
+  "package-specs": [
+    {
+      "module": "esmodule",
+      "in-source": true
+    }
+  ],
+  "suffix": ".res.mjs",
+  "bs-dependencies": [
+    "@rescript/core",
+    "@rescript/react",
+    "rescript-classnames",
+    "rescript-webapi",
+    "rescript-debounce-react",
+    "rescript-test"
+  ],
+  "bsc-flags": ["-open RescriptCore"],
+  "jsx": {
+    "version": 4
+  },
+  "gentypeconfig": {
+    "module": "esmodule",
+    "moduleResolution": "node",
+    "generatedFileExtension": ".gen.tsx",
+    "shims": {
+      "Promise": "Promise"
+    }
+  }
+}
