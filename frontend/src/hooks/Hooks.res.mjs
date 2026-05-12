@@ -68,6 +68,8 @@ var sizeToStyle = UseEditorLayout.sizeToStyle;
 
 var calculatePreviewSize = UseEditorLayout.calculatePreviewSize;
 
+var calculateTimelineSize = UseEditorLayout.calculateTimelineSize;
+
 var useEditorLayout = UseEditorLayout.useEditorLayout;
 
 export {
@@ -79,6 +81,7 @@ export {
   emptySize ,
   sizeToStyle ,
   calculatePreviewSize ,
+  calculateTimelineSize ,
   useEditorLayout ,
   useEvent ,
   useToggle ,

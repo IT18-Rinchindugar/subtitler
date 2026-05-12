@@ -11,13 +11,16 @@ import type {subtitlesManager as ChunksList_subtitlesManager} from '../../../src
 
 import type {t as Core__Promise_t} from '@rescript/core/src/Core__Promise.gen';
 
-export type props<subtitlesManager,render,rendererPreviewCanvasRef,renderCanvasKey,videoFileName,onResetPlayerState> = {
+export type props<subtitlesManager,render,rendererPreviewCanvasRef,renderCanvasKey,videoFileName,onResetPlayerState,saveStatus,onBack,projectTitle> = {
   readonly subtitlesManager: subtitlesManager; 
   readonly render: render; 
   readonly rendererPreviewCanvasRef: rendererPreviewCanvasRef; 
   readonly renderCanvasKey: renderCanvasKey; 
   readonly videoFileName: videoFileName; 
-  readonly onResetPlayerState: onResetPlayerState
+  readonly onResetPlayerState: onResetPlayerState; 
+  readonly saveStatus: saveStatus; 
+  readonly onBack: onBack; 
+  readonly projectTitle: projectTitle
 };
 
 export const a: <T1>() => {[id: string]: T1} = EditorJS.a as any;
@@ -28,5 +31,8 @@ export const Editor: React.ComponentType<{
   readonly rendererPreviewCanvasRef: any; 
   readonly renderCanvasKey: number; 
   readonly videoFileName: string; 
-  readonly onResetPlayerState: (_1:(() => void)) => void
+  readonly onResetPlayerState: (_1:(() => void)) => void; 
+  readonly saveStatus: string; 
+  readonly onBack: () => void; 
+  readonly projectTitle: string
 }> = EditorJS.make as any;

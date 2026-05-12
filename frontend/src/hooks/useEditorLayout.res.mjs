@@ -32,6 +32,18 @@ function calculatePreviewSize(windowDimensions, param, min_media_controls_width,
         };
 }
 
+function calculateTimelineSize(viewportSize, previewSize) {
+  var timelineHeight = viewportSize.height - previewSize.height;
+  if (timelineHeight > 0.0) {
+    return {
+            height: timelineHeight,
+            width: viewportSize.width,
+            scale: 1.0
+          };
+  }
+  
+}
+
 function useEditorLayout(isFullScreen) {
   var viewportSize = UseDimensions.useDimensions();
   var match = EditorContext.useEditorContext();
@@ -82,6 +94,7 @@ export {
   emptySize ,
   sizeToStyle ,
   calculatePreviewSize ,
+  calculateTimelineSize ,
   useEditorLayout ,
 }
 /* react Not a pure module */

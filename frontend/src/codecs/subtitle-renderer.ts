@@ -173,9 +173,35 @@ function createKonvaMeasureText(style: style): (text: string) => number {
 export function createCtx(
   videoConfig: VideoDecoderConfig,
   canvas: OffscreenCanvas,
-  style: style,
+  style: style & { _videoWidth?: number; _videoHeight?: number },
   wordAnimationData?: WordAnimationData,
 ): RendererContext {
+  // Scale stored absolute-pixel coordinates to match the actual render canvas
+  // dimensions. If _videoWidth/_videoHeight are absent (old saved styles or
+  // first render), scale factors default to 1 — no change.
+  const scaleX = (style._videoWidth && videoConfig.codedWidth) ? videoConfig.codedWidth / style._videoWidth : 1;
+  const scaleY = (style._videoHeight && videoConfig.codedHeight) ? videoConfig.codedHeight / style._videoHeight : 1;
+  const scaleMin = Math.min(scaleX, scaleY);
+
+  const s = {
+    ...style,
+    x: Math.round(style.x * scaleX),
+    y: Math.round(style.y * scaleY),
+    fontSizePx: Math.round(style.fontSizePx * scaleY),
+    blockSize: {
+      width: Math.round(style.blockSize.width * scaleX),
+      height: Math.round(style.blockSize.height * scaleY),
+    },
+    strokeWidth: Math.round(style.strokeWidth * scaleMin),
+    background: {
+      ...style.background,
+      paddingX: Math.round(style.background.paddingX * scaleX),
+      paddingY: Math.round(style.background.paddingY * scaleY),
+      borderRadius: Math.round(style.background.borderRadius * scaleMin),
+      strokeWidth: Math.round(style.background.strokeWidth * scaleMin),
+    },
+  };
+
   let stage = new KonvaCore.Stage({
     width: videoConfig.codedWidth,
     height: videoConfig.codedHeight,
@@ -183,34 +209,34 @@ export function createCtx(
 
   let text = new Text({
     fillAfterStrokeEnabled: true,
-    fontStyle: style.fontWeight.toString(),
-    x: style.x,
-    y: style.y,
-    fontSize: style.fontSizePx,
-    fontFamily: style.fontFamily,
-    fill: style.color,
-    stroke: style.strokeColor,
-    align: style.align.toLowerCase(),
-    width: style.blockSize.width,
-    strokeWidth: style.strokeWidth,
-    strokeEnabled: style.strokeColor !== style.color,
+    fontStyle: s.fontWeight.toString(),
+    x: s.x,
+    y: s.y,
+    fontSize: s.fontSizePx,
+    fontFamily: s.fontFamily,
+    fill: s.color,
+    stroke: s.strokeColor,
+    align: s.align.toLowerCase(),
+    width: s.blockSize.width,
+    strokeWidth: s.strokeWidth,
+    strokeEnabled: s.strokeColor !== s.color,
   });
 
-  let background = style.showBackground
+  let background = s.showBackground
     ? new Rect({
-        fill: style.background.color,
-        stroke: style.background.strokeColor,
-        strokeWidth: style.background.strokeWidth,
-        opacity: style.background.opacity,
+        fill: s.background.color,
+        stroke: s.background.strokeColor,
+        strokeWidth: s.background.strokeWidth,
+        opacity: s.background.opacity,
         shadowForStrokeEnabled: false,
         perfectDrawEnabled: false,
-        cornerRadius: style.background.borderRadius,
+        cornerRadius: s.background.borderRadius,
         fillAfterStrokeEnabled: true,
-        visible: style.showBackground,
-        x: text.x() - style.background.paddingX,
-        y: text.y() - style.background.paddingY,
-        width: text.width() + style.background.paddingX * 2,
-        height: text.height() + style.background.paddingY * 2,
+        visible: s.showBackground,
+        x: text.x() - s.background.paddingX,
+        y: text.y() - s.background.paddingY,
+        width: text.width() + s.background.paddingX * 2,
+        height: text.height() + s.background.paddingY * 2,
       })
     : null;
 
@@ -226,10 +252,10 @@ export function createCtx(
   let wordTexts: Konva.Text[] | undefined;
   let wordBackgrounds: Konva.Rect[] | undefined;
 
-  if (style.wordAnimation && wordAnimationData) {
+  if (s.wordAnimation && wordAnimationData) {
     wordGroup = new Group({
-      x: style.x,
-      y: style.y,
+      x: s.x,
+      y: s.y,
       visible: false,
     });
 
@@ -245,7 +271,7 @@ export function createCtx(
     stage,
     layer,
     text,
-    style,
+    style: s,
     background,
     lastPlayedCue: undefined,
     videoCanvasContext: canvas.getContext("2d"),

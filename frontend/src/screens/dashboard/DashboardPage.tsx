@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useDropzone } from "react-dropzone";
 import clsx from "clsx";
 import { projectsApi, uploadApi, uploadFileToS3, getVideoMetadata, type ProjectSummary } from "../../api/client";
@@ -27,7 +27,21 @@ function StatusBadge({ status }: { status: ProjectSummary["status"] }) {
   );
 }
 
-function ProjectCard({ project, onClick }: { project: ProjectSummary; onClick: () => void }) {
+function ProjectCard({
+  project,
+  onClick,
+  onDelete,
+  onRename,
+}: {
+  project: ProjectSummary;
+  onClick: () => void;
+  onDelete: () => void;
+  onRename: (newTitle: string) => void;
+}) {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(project.title);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
   const duration = project.videoDuration
     ? `${Math.floor(project.videoDuration / 60)}:${String(Math.floor(project.videoDuration % 60)).padStart(2, "0")}`
     : null;
@@ -38,14 +52,54 @@ function ProjectCard({ project, onClick }: { project: ProjectSummary; onClick: (
     year: "numeric",
   });
 
+  function startEdit(e: React.MouseEvent) {
+    e.stopPropagation();
+    setDraft(project.title);
+    setEditing(true);
+    setTimeout(() => inputRef.current?.select(), 0);
+  }
+
+  function commitEdit() {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== project.title) onRename(trimmed);
+    setEditing(false);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") commitEdit();
+    if (e.key === "Escape") setEditing(false);
+  }
+
   return (
-    <button
-      onClick={onClick}
-      disabled={project.status !== "ready"}
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 text-left transition-all hover:border-orange-500/40 hover:shadow-lg hover:shadow-orange-500/5 disabled:cursor-default disabled:opacity-70"
-    >
-      {/* Thumbnail */}
-      <div className="relative aspect-video w-full bg-zinc-800 overflow-hidden">
+    <div className="group relative flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-all hover:border-orange-500/40 hover:shadow-lg hover:shadow-orange-500/5">
+      {/* Action buttons — top-right corner, visible on hover */}
+      <div className="absolute right-2 top-2 z-10 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <button
+          onClick={startEdit}
+          title="Rename"
+          className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-800/90 text-zinc-400 backdrop-blur-sm transition-colors hover:bg-zinc-700 hover:text-white"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 16H9v-3z" />
+          </svg>
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          title="Delete"
+          className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-800/90 text-zinc-400 backdrop-blur-sm transition-colors hover:bg-red-900/80 hover:text-red-300"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m-7 0a1 1 0 01-1-1V5a1 1 0 011-1h6a1 1 0 011 1v1a1 1 0 01-1 1H9z" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Thumbnail — clickable to open */}
+      <button
+        onClick={onClick}
+        disabled={project.status !== "ready"}
+        className="relative aspect-video w-full bg-zinc-800 overflow-hidden disabled:cursor-default"
+      >
         {project.thumbnailUrl ? (
           <img
             src={project.thumbnailUrl}
@@ -69,17 +123,29 @@ function ProjectCard({ project, onClick }: { project: ProjectSummary; onClick: (
             {duration}
           </span>
         )}
-      </div>
+      </button>
 
       {/* Info */}
       <div className="flex flex-col gap-1.5 p-3">
-        <p className="truncate font-medium text-white">{project.title}</p>
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={handleKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full truncate rounded bg-zinc-800 px-2 py-0.5 text-sm font-medium text-white outline-none ring-1 ring-orange-500"
+          />
+        ) : (
+          <p className="truncate font-medium text-white">{project.title}</p>
+        )}
         <div className="flex items-center justify-between">
           <StatusBadge status={project.status} />
           <span className="text-xs text-zinc-500">{date}</span>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -148,6 +214,7 @@ export default function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [deleteConfirm, setDeleteConfirm] = React.useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["projects"],
@@ -159,6 +226,20 @@ export default function DashboardPage() {
       );
       return hasActive ? 4000 : false;
     },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (projectId: string) => projectsApi.delete(projectId),
+    onSuccess: () => {
+      setDeleteConfirm(null);
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: ({ projectId, title }: { projectId: string; title: string }) =>
+      projectsApi.patch(projectId, { title }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
 
   function handleProjectCreated(projectId: string) {
@@ -213,6 +294,8 @@ export default function DashboardPage() {
                 key={project.id}
                 project={project}
                 onClick={() => navigate({ to: `/editor/${project.id}` })}
+                onDelete={() => setDeleteConfirm(project.id)}
+                onRename={(title) => renameMutation.mutate({ projectId: project.id, title })}
               />
             ))}
           </div>
@@ -224,6 +307,34 @@ export default function DashboardPage() {
           </p>
         )}
       </main>
+
+      {/* Delete confirmation dialog */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-xl">
+            <h3 className="text-base font-semibold text-white">Delete project?</h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              This will permanently delete the video and all its subtitles. This cannot be undone.
+            </p>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteMutation.mutate(deleteConfirm)}
+                disabled={deleteMutation.isPending}
+                className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-60"
+              >
+                {deleteMutation.isPending && <Spinner sizeRem={0.875} />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

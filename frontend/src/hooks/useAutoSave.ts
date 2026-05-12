@@ -6,7 +6,8 @@ export type SaveStatus = "idle" | "saving" | "saved" | "error";
 export function useAutoSave(
   projectId: string | null,
   subtitlesManager: any | null,
-  styleJson: Record<string, unknown> | null
+  getStyleJson: (() => Record<string, unknown> | null) | null,
+  styleVersion: number = 0
 ): SaveStatus {
   const [status, setStatus] = React.useState<SaveStatus>("idle");
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -44,6 +45,7 @@ export function useAutoSave(
             : undefined,
         }));
 
+        const styleJson = getStyleJson?.();
         await projectsApi.patch(projectId, {
           cues,
           ...(styleJson ? { styleJson } : {}),
@@ -60,7 +62,7 @@ export function useAutoSave(
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [activeSubtitles, styleJson, projectId]);
+  }, [activeSubtitles, styleVersion, projectId]);
 
   return status;
 }

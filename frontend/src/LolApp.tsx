@@ -602,6 +602,9 @@ export default function LolApp() {
               onResetPlayerState={(fn: () => void) => {
                 resetPlayerStateRef.current = fn;
               }}
+              saveStatus=""
+              onBack={() => {}}
+              projectTitle={file.name}
             />
           </React.Suspense>
         </EditorContext.make>

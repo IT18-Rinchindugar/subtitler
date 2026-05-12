@@ -58,6 +58,19 @@ let calculatePreviewSize = (
   }
 }
 
+let calculateTimelineSize = (viewportSize: dimensions, previewSize: sectionSize) => {
+  let timelineHeight = viewportSize.height->Belt.Int.toFloat -. previewSize.height
+  if timelineHeight > 0.0 {
+    Some({
+      height: timelineHeight,
+      width: viewportSize.width->Belt.Int.toFloat,
+      scale: 1.0,
+    })
+  } else {
+    None
+  }
+}
+
 let useEditorLayout = (~isFullScreen) => {
   let viewportSize = useDimensions()
   let {videoMeta} = EditorContext.useEditorContext()

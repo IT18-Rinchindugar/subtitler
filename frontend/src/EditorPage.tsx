@@ -6,7 +6,7 @@ import RenderWorker from "./codecs/render-worker?worker";
 import { Spinner } from "./ui/Spinner";
 import { LandingDropzone } from "./screens/LandingDropzone";
 import { Progress } from "./ui/Progress.gen";
-import { makeEditorContextComponent } from "./screens/editor/EditorContext.gen";
+import { makeEditorContextComponent, useEditorContext } from "./screens/editor/EditorContext.gen";
 import { Transition } from "@headlessui/react";
 import type {
   Target,
@@ -17,7 +17,6 @@ import type {
   OutputVideoCodec,
   OutputAudioCodec,
 } from "./codecs/render-worker";
-import clsx from "clsx";
 import { ShowErrorContext, UserFacingError } from "./ErrorBoundary";
 import { log } from "./hooks/useAnalytics";
 import HeartIcon from "@heroicons/react/20/solid/HeartIcon";
@@ -102,6 +101,26 @@ type EditorMode =
   | { type: "transcription_error"; message: string }
   | { type: "ready" };
 
+function StyleSyncBridge({
+  onStyle,
+  onStyleVersion,
+}: {
+  onStyle: (s: Record<string, unknown>) => void;
+  onStyleVersion: React.Dispatch<React.SetStateAction<number>>;
+}) {
+  const ctx = useEditorContext();
+  const [style] = ctx.useStyle();
+  React.useEffect(() => {
+    onStyle({
+      ...(style as unknown as Record<string, unknown>),
+      _videoWidth: ctx.videoMeta.width,
+      _videoHeight: ctx.videoMeta.height,
+    });
+    onStyleVersion((v) => v + 1);
+  }, [style]);
+  return null;
+}
+
 export default function EditorPage() {
   const failWith = React.useContext(ShowErrorContext);
   const params = useParams({ strict: false }) as { projectId?: string };
@@ -120,6 +139,9 @@ export default function EditorPage() {
   const [project, setProject] = React.useState<ProjectDetail | null>(null);
   const [serverCues, setServerCues] = React.useState<SubtitleCue[]>([]);
   const [language, setLanguage] = React.useState("en");
+
+  const liveStyleJsonRef = React.useRef<Record<string, unknown> | null>(null);
+  const [styleVersion, setStyleVersion] = React.useState(0);
 
   const [renderState, setRenderState] = React.useState<"idle" | "rendering" | "done" | "error">("idle");
   const [renderError, setRenderError] = React.useState<string | null>(null);
@@ -217,7 +239,7 @@ export default function EditorPage() {
     const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
     setFile({
-      name: proj.videoFilename,
+      name: proj.title ?? "video",
       file: null,
       objectURL,
       audioBuffer,
@@ -316,7 +338,8 @@ export default function EditorPage() {
   const saveStatus = useAutoSave(
     projectId ?? null,
     mode.type === "ready" ? subtitlesManager : null,
-    mode.type === "ready" ? project?.styleJson ?? null : null
+    mode.type === "ready" ? () => liveStyleJsonRef.current : null,
+    styleVersion,
   );
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -330,11 +353,7 @@ export default function EditorPage() {
   const render = React.useCallback(
     async (style: style, outputFormat: string = "mp4", videoCodec?: string, audioCodec?: string) => {
       log("video_render_started");
-      const worker = new RenderWorker();
-      if (!file || !rendererPreviewCanvasRef.current) return Promise.reject();
-
-      const offscreenCanvas = rendererPreviewCanvasRef.current.transferControlToOffscreen();
-      if (!offscreenCanvas) return Promise.reject();
+      if (!file) return Promise.reject(new Error("No file"));
 
       const validFormat: OutputFormat =
         outputFormat === "webm" ? "webm" : outputFormat === "mov" ? "mov" : "mp4";
@@ -343,70 +362,108 @@ export default function EditorPage() {
       const validAudioCodec: OutputAudioCodec | undefined =
         audioCodec && ["aac", "opus", "mp3", "vorbis", "flac"].includes(audioCodec) ? (audioCodec as OutputAudioCodec) : undefined;
 
-      const target = await createTarget(file.name, validFormat);
+      // Show render page immediately so the user sees progress — file picker
+      // (if any) will appear on top of it. Must happen before any await so
+      // React commits the canvas to the DOM before we call transferControlToOffscreen.
       setRenderState("rendering");
       setProgressItems([
         { id: "filereadprogress", title: "Reading file", progress: 0 },
         { id: "renderprogress", title: "Rendering frames", progress: 0 },
       ]);
 
-      worker.postMessage(
-        {
-          type: "render",
-          payload: {
-            style,
-            target,
-            dataUri: file.file ?? new Blob([await fetch(file.objectURL).then((r) => r.arrayBuffer())]),
-            canvas: offscreenCanvas,
-            cues: subtitlesManager.activeSubtitles,
-            outputFormat: validFormat,
-            videoCodec: validVideoCodec,
-            audioCodec: validAudioCodec,
-            wordAnimationData:
-              style.showWordAnimation &&
-              subtitlesManager.transcriptionState !== "TranscriptionInProgress"
-                ? {
-                    wordChunks: subtitlesManager.transcriptionState.wordChunks,
-                    cueRanges: subtitlesManager.transcriptionState.cueRanges,
-                  }
-                : undefined,
-          },
-        } as RenderWorkerMessage,
-        [offscreenCanvas]
-      );
+      try {
+        // Wait one frame so React flushes the render-page state and mounts the
+        // rendererPreviewCanvas before we try to grab it.
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-      worker.addEventListener("message", (e: MessageEvent<RenderProgressMessage>) => {
-        if (e.data.type === "error") {
-          setRenderError(e.data.message);
+        if (!rendererPreviewCanvasRef.current) {
+          throw new Error("Canvas not ready — please try again.");
+        }
+
+        const offscreenCanvas = rendererPreviewCanvasRef.current.transferControlToOffscreen();
+
+        // Fetch dataUri and open file picker in parallel — both happen after the
+        // canvas is transferred so the user gesture is still live.
+        const [dataUri, target] = await Promise.all([
+          file.file
+            ? Promise.resolve(file.file)
+            : fetch(file.objectURL).then((r) => r.arrayBuffer()).then((buf) => new Blob([buf])),
+          createTarget(file.name, validFormat),
+        ]);
+
+        const worker = new RenderWorker();
+
+        worker.addEventListener("message", (e: MessageEvent<RenderProgressMessage>) => {
+          if (e.data.type === "error") {
+            setRenderError(e.data.message);
+            setRenderState("error");
+            setProgressItems([]);
+            worker.terminate();
+          }
+          if (e.data.type === "done") {
+            log("video_rendered");
+            saveTarget(e.data.target, e.data.outputFormat);
+            document.title = `✅ Subtitles rendered!`;
+            setRenderState("done");
+            setProgressItems([]);
+            worker.terminate();
+            import("js-confetti").then(({ default: JsConfetti }) => new JsConfetti().addConfetti());
+          }
+          if (
+            e.data.type === "renderprogress" ||
+            e.data.type === "encodeprogress" ||
+            e.data.type === "filereadprogress"
+          ) {
+            const progress = e.data.progress;
+            setProgressItems((prev) =>
+              prev.map((item) => (item.id === e.data.type ? { ...item, progress } : item))
+            );
+            if (e.data.type === "renderprogress")
+              document.title = `${Math.floor(progress)}% — subtitles for ${file.name}`;
+          }
+        });
+
+        worker.postMessage(
+          {
+            type: "render",
+            payload: {
+              style,
+              target,
+              dataUri,
+              canvas: offscreenCanvas,
+              cues: subtitlesManager.activeSubtitles,
+              outputFormat: validFormat,
+              videoCodec: validVideoCodec,
+              audioCodec: validAudioCodec,
+              wordAnimationData:
+                style.showWordAnimation &&
+                subtitlesManager.transcriptionState !== "TranscriptionInProgress"
+                  ? {
+                      wordChunks: subtitlesManager.transcriptionState.wordChunks,
+                      cueRanges: subtitlesManager.transcriptionState.cueRanges,
+                    }
+                  : undefined,
+            },
+          } as RenderWorkerMessage,
+          [offscreenCanvas]
+        );
+      } catch (e) {
+        // User cancelled file picker (AbortError) — silently go back to editor.
+        // Any other error — show it on the render page.
+        if (e instanceof Error && e.name === "AbortError") {
+          setRenderState("idle");
+          setProgressItems([]);
+        } else {
+          setRenderError(e instanceof Error ? e.message : String(e));
           setRenderState("error");
           setProgressItems([]);
-          worker.terminate();
         }
-        if (e.data.type === "done") {
-          log("video_rendered");
-          saveTarget(e.data.target, e.data.outputFormat);
-          document.title = `✅ Subtitles rendered!`;
-          setRenderState("done");
-          setProgressItems([]);
-          worker.terminate();
-          import("js-confetti").then(({ default: JsConfetti }) => new JsConfetti().addConfetti());
-        }
-        if (
-          e.data.type === "renderprogress" ||
-          e.data.type === "encodeprogress" ||
-          e.data.type === "filereadprogress"
-        ) {
-          const progress = e.data.progress;
-          setProgressItems((prev) =>
-            prev.map((item) => (item.id === e.data.type ? { ...item, progress } : item))
-          );
-          if (e.data.type === "renderprogress")
-            document.title = `${Math.floor(progress)}% — subtitles for ${file.name}`;
-        }
-      });
+        return Promise.reject(e);
+      }
     },
     [subtitlesManager, file]
   );
+
 
   const handleMetadataLoad = React.useCallback(
     (e: React.FormEvent<HTMLVideoElement>) => {
@@ -505,6 +562,10 @@ export default function EditorPage() {
 
       {EditorContext && (
         <EditorContext.make>
+          <StyleSyncBridge
+            onStyle={(s) => { liveStyleJsonRef.current = s; }}
+            onStyleVersion={setStyleVersion}
+          />
           <React.Suspense
             fallback={
               <div className="flex items-center justify-center h-dvh md:h-screen">
@@ -519,6 +580,8 @@ export default function EditorPage() {
               renderCanvasKey={renderCanvasKey}
               videoFileName={file?.name ?? "video"}
               saveStatus={saveStatus}
+              projectTitle={file?.name ?? project?.title ?? "Untitled"}
+              onBack={() => navigate({ to: "/dashboard" })}
               onResetPlayerState={(fn: () => void) => {
                 resetPlayerStateRef.current = fn;
               }}
@@ -528,74 +591,141 @@ export default function EditorPage() {
       )}
 
       <Transition show={renderState !== "idle"}>
-        <div
-          className={clsx(
-            "transition flex-col absolute z-[60] w-screen h-dvh md:h-screen bg-white/10 backdrop-blur-xl inset-0 duration-300 ease-in data-[closed]:opacity-0 flex items-center justify-center px-4",
-            renderState === "done" && "!bg-green-600/10 !backdrop-blur-2xl",
-            renderState === "error" && "!bg-red-600/10 !backdrop-blur-2xl",
-          )}
-        >
-          {renderState === "rendering" && (
-            <>
-              <h2 className="text-2xl md:text-5xl text-center tracking-wide font-bold">
-                Rendering your video
-              </h2>
-              <p className="text-gray-300 text-balance text-center text-sm md:text-lg max-w-screen-sm mt-4">
-                Your video with subtitles is being rendered. Feel free to switch tabs — it continues in the background.
-              </p>
-              <div className="w-full flex flex-col gap-y-2 mt-6 md:mt-8 max-w-[34rem]">
-                {progressItems.map((item) => (
-                  <Progress key={item.id} name={item.title} progress={item.progress ?? 0} />
-                ))}
-              </div>
-            </>
-          )}
-
-          {renderState === "error" && (
-            <>
-              <h2 className="text-2xl md:text-5xl text-center tracking-wide font-bold text-red-400">
-                Rendering Failed
-              </h2>
-              <p className="text-gray-200 text-balance text-center max-w-screen-sm text-sm md:text-lg mt-4">
-                {renderError || "An unknown error occurred during rendering."}
-              </p>
-              <button onClick={handleBackToEditor} className="mt-6 text-gray-300 hover:text-white underline underline-offset-4 transition">
-                ← Back to editor
+        <div className="fixed inset-0 z-[60] flex flex-col bg-zinc-950 transition duration-300 ease-in data-[closed]:opacity-0">
+          {/* Render page header */}
+          <header className="flex items-center gap-3 border-b border-zinc-800 px-4 py-3 md:px-6 shrink-0">
+            {renderState !== "rendering" && (
+              <button
+                onClick={handleBackToEditor}
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+                Back to editor
               </button>
-            </>
-          )}
+            )}
+            <span className="flex-1 truncate text-sm font-medium text-white text-center pr-20">
+              {file?.name ?? project?.title ?? "Untitled"}
+            </span>
+          </header>
 
-          {renderState === "done" && (
-            <>
-              <h2 className="text-2xl md:text-5xl text-center tracking-wide font-bold">
-                Video Rendered!
-              </h2>
-              <p className="text-gray-200 text-balance text-center max-w-screen-sm text-sm md:text-lg mt-4">
-                You'll find your video at the location you selected. Time for publishing!
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center mt-6">
-                <a
-                  href="https://www.producthunt.com/products/fframes-subtitles/reviews/new"
-                  rel="noopener noreferrer"
-                  className="mx-auto outline-none focus-visible:ring ring-orange-500 ring-offset-zinc-900 ring-offset-2 hover:bg-orange-400 transition rounded-lg gap-2 bg-orange-600 inline-flex items-center px-4 py-3 font-medium text-sm md:text-base"
-                >
-                  <ProductHuntIcon.make className="size-5 md:size-6 text-orange-500" />
-                  Leave a Review
-                </a>
-                <a
-                  href="https://github.com/sponsors/dmtrKovalenko"
-                  rel="noopener noreferrer"
-                  className="mx-auto outline-none focus-visible:ring ring-rose-500 ring-offset-zinc-900 ring-offset-2 hover:bg-rose-400 transition rounded-lg bg-rose-600 gap-2 inline-flex items-center px-4 py-3 font-medium text-sm md:text-base"
-                >
-                  <HeartIcon className="size-5 md:size-6" />
-                  Support Author
-                </a>
+          {/* Render page body */}
+          <div className="flex flex-1 flex-col items-center justify-center px-4">
+
+            {renderState === "rendering" && (
+              <div className="flex w-full max-w-lg flex-col items-center gap-6">
+                {/* Animated ring */}
+                <div className="relative flex h-20 w-20 items-center justify-center">
+                  <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 80 80">
+                    <circle cx="40" cy="40" r="34" fill="none" stroke="#27272a" strokeWidth="6" />
+                    <circle
+                      cx="40" cy="40" r="34"
+                      fill="none"
+                      stroke="#f97316"
+                      strokeWidth="6"
+                      strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 34}`}
+                      strokeDashoffset={`${2 * Math.PI * 34 * (1 - (progressItems.find(i => i.id === "renderprogress")?.progress ?? 0) / 100)}`}
+                      className="transition-all duration-300"
+                    />
+                  </svg>
+                  <span className="text-sm font-semibold text-white tabular-nums">
+                    {`${Math.floor(progressItems.find(i => i.id === "renderprogress")?.progress ?? 0)}%`}
+                  </span>
+                </div>
+
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
+                    Rendering your video
+                  </h2>
+                  <p className="mt-2 text-sm text-zinc-400">
+                    Feel free to switch tabs — it continues in the background.
+                  </p>
+                </div>
+
+                <div className="w-full flex flex-col gap-3">
+                  {progressItems.map((item) => (
+                    <div key={item.id} className="flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between text-xs text-zinc-400">
+                        <span>{item.title}</span>
+                        <span className="tabular-nums">{Math.floor(item.progress ?? 0)}%</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+                        <div
+                          className="h-full rounded-full bg-orange-500 transition-all duration-300"
+                          style={{ width: `${item.progress ?? 0}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <button onClick={handleBackToEditor} className="mt-6 text-gray-300 hover:text-white underline underline-offset-4 transition text-sm md:text-base">
-                ← Back to editor
-              </button>
-            </>
-          )}
+            )}
+
+            {renderState === "error" && (
+              <div className="flex max-w-md flex-col items-center gap-4 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10">
+                  <svg className="h-8 w-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-red-400">Rendering Failed</h2>
+                  <p className="mt-2 text-sm text-zinc-400">
+                    {renderError || "An unknown error occurred during rendering."}
+                  </p>
+                </div>
+                <button
+                  onClick={handleBackToEditor}
+                  className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white"
+                >
+                  ← Back to editor
+                </button>
+              </div>
+            )}
+
+            {renderState === "done" && (
+              <div className="flex max-w-md flex-col items-center gap-6 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
+                  <svg className="h-8 w-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Video Rendered!</h2>
+                  <p className="mt-2 text-sm text-zinc-400">
+                    Your video with subtitles has been saved. Time for publishing!
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <a
+                    href="https://www.producthunt.com/products/fframes-subtitles/reviews/new"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-orange-500"
+                  >
+                    <ProductHuntIcon.make className="size-4 text-orange-200" />
+                    Leave a Review
+                  </a>
+                  <a
+                    href="https://github.com/sponsors/dmtrKovalenko"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-rose-500"
+                  >
+                    <HeartIcon className="size-4" />
+                    Support Author
+                  </a>
+                </div>
+                <button
+                  onClick={handleBackToEditor}
+                  className="text-sm text-zinc-500 underline underline-offset-4 transition-colors hover:text-zinc-300"
+                >
+                  ← Back to editor
+                </button>
+              </div>
+            )}
+
+          </div>
         </div>
       </Transition>
     </>

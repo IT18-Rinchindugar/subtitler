@@ -63,6 +63,33 @@ module MobileCanvasStyle = {
     )
 }
 
+module SaveStatusBadge = {
+  @react.component
+  let make = (~saveStatus: string) => {
+    let (label, className) = switch saveStatus {
+    | "saving" => (
+        "Saving…",
+        "text-zinc-400",
+      )
+    | "saved" => (
+        "Saved",
+        "text-green-400",
+      )
+    | "error" => (
+        "Save failed",
+        "text-red-400",
+      )
+    | _ => ("", "")
+    }
+
+    if String.length(label) == 0 {
+      React.null
+    } else {
+      <span className={`text-xs font-medium ${className}`}> {label->React.string} </span>
+    }
+  }
+}
+
 @genType.as("Editor") @react.component
 let make = React.memo((
   ~subtitlesManager,
@@ -71,11 +98,15 @@ let make = React.memo((
   ~renderCanvasKey,
   ~videoFileName,
   ~onResetPlayerState,
+  ~saveStatus: string,
+  ~onBack: unit => unit,
+  ~projectTitle: string,
 ) => {
   let (isFullScreen, fullScreenToggler) = Hooks.useToggle(false)
   let ctx = EditorContext.useEditorContext()
-  let layout = Hooks.useEditorLayout(~isFullScreen)
+  let _layout = Hooks.useEditorLayout(~isFullScreen)
   let isMobile = useIsMobile()
+  let viewportSize = Hooks.useDimensions()
 
   let videoWidth = ctx.videoMeta.width->Int.toFloat
   let videoHeight = ctx.videoMeta.height->Int.toFloat
@@ -166,10 +197,32 @@ let make = React.memo((
       </div>
     </div>
 
+  let header =
+    <header
+      className="shrink-0 flex items-center gap-3 px-3 py-2 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm">
+      <button
+        onClick={_ => onBack()}
+        className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white">
+        <svg
+          className="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        {"Back"->React.string}
+      </button>
+      <span className="h-4 w-px bg-zinc-700" />
+      <p className="flex-1 truncate text-sm font-medium text-white"> {projectTitle->React.string} </p>
+      <SaveStatusBadge saveStatus />
+    </header>
+
   if isMobile {
     <div
       id="fframes-editor"
       className="w-screen h-dvh bg-zinc-950 flex flex-col fixed inset-0 overflow-hidden">
+      {header}
       <div className="flex-1 flex flex-col min-h-0">
         <Tabs
           defaultIndex=0
@@ -203,99 +256,122 @@ let make = React.memo((
       </div>
     </div>
   } else {
+    // Desktop: fixed left panel (subtitles on top, style below) + video fills the rest
+    let leftPanelWidth = 460
+    let rightPanelViewport: UseDimensions.dimensions = {
+      width: viewportSize.width - leftPanelWidth,
+      height: viewportSize.height,
+    }
+    let desktopPreview = UseEditorLayout.calculatePreviewSize(
+      rightPanelViewport,
+      ctx.videoMeta,
+      ~min_media_controls_width=0,
+      ~min_timeline_height=UseEditorLayout.min_timeline_height,
+    )
+
     <div
       id="fframes-editor"
-      className="w-screen h-screen bg-zinc-900 overflow-hidden relative flex flex-col">
-      <div className="flex justify-center w-full flex-1 min-h-0 overflow-hidden">
-        {layout.mediaControls
-        ->Belt.Option.map(size => {
-          let showSideBySide = size.width >= 770.0
-
-          <div
-            style={size->UseEditorLayout.sizeToStyle}
-            className="@container col-span-2 pt-2 flex flex-col border-r border-zinc-800 overflow-hidden">
-            {if showSideBySide {
-              <div
-                className="flex overflow-hidden pl-4 flex-1 min-h-0 max-h-full divide-x divide-zinc-700">
-                <div
-                  className="pr-6 flex-1 flex max-h-full overflow-auto flex-col justify-center gap-y-4">
-                  <ChunksList subtitlesManager title={subtitlesTitle} />
-                </div>
-                <div className="pl-6 flex-1 flex flex-col gap-y-4 overflow-auto">
-                  <h2 className="mx-auto text-xl"> {styleTitle} </h2>
+      className="w-screen h-screen bg-zinc-950 overflow-hidden flex flex-col">
+      {header}
+      // ── Body: left panel + right video panel ──────────────────────────────
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        // ── Left panel: tabbed subtitles / style ─────────────────────────
+        <div
+          className="w-[460px] shrink-0 flex flex-col border-r border-zinc-800 overflow-hidden bg-zinc-950">
+          <Tabs
+            defaultIndex=0
+            className="outline-none"
+            tabs=[
+              {
+                id: "subtitles",
+                name: subtitlesTitle,
+                content: <div className="px-4 py-3 h-full">
+                  <ChunksList subtitlesManager title={React.null} />
+                </div>,
+              },
+              {
+                id: "style",
+                name: styleTitle,
+                content: <div className="px-4 py-3">
                   <StyleEditor />
-                </div>
-              </div>
-            } else {
-              <div className="flex-1 min-h-0 flex flex-col pt-1 px-2 gap-2 overflow-hidden">
-                <Tabs
-                  defaultIndex=0
-                  tabs=[
-                    {
-                      id: "subtitles",
-                      name: subtitlesTitle,
-                      content: <ChunksList subtitlesManager title={React.null} />,
-                    },
-                    {id: "style", name: styleTitle, content: <StyleEditor />},
-                  ]
-                />
-              </div>
-            }}
+                </div>,
+              },
+            ]
+          />
+        </div>
+
+        // ── Right panel: video centered + letterboxed ─────────────────────
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-zinc-950">
+          <div className="flex-1 flex items-center justify-center min-h-0 p-4">
+            <div
+              className="relative shrink-0 bg-black"
+              style={ReactDOMStyle.make(
+                ~width=`${(ctx.videoMeta.width->Int.toFloat *. desktopPreview.scale)->Js.Float.toString}px`,
+                ~height=`${(ctx.videoMeta.height->Int.toFloat *. desktopPreview.scale)->Js.Float.toString}px`,
+                (),
+              )}>
+              <canvas
+                id="editor-preview"
+                ref={ReactDOM.Ref.domRef(ctx.dom.canvasRef)}
+                width={ctx.videoMeta.width->Int.toString}
+                height={ctx.videoMeta.height->Int.toString}
+                style={ReactDOMStyle.make(
+                  ~width=`${ctx.videoMeta.width->Int.toString}px`,
+                  ~height=`${ctx.videoMeta.height->Int.toString}px`,
+                  ~transform=`scale(${desktopPreview.scale->Js.Float.toString})`,
+                  ~transformOrigin="top left",
+                  (),
+                )}
+                className="bg-black absolute inset-0"
+              />
+              <canvas
+                key={renderCanvasKey->Int.toString}
+                ref={ReactDOM.Ref.domRef(rendererPreviewCanvasRef)}
+                width={ctx.videoMeta.width->Int.toString}
+                height={ctx.videoMeta.height->Int.toString}
+                style={ReactDOMStyle.make(
+                  ~width=`${ctx.videoMeta.width->Int.toString}px`,
+                  ~height=`${ctx.videoMeta.height->Int.toString}px`,
+                  ~transform=`scale(${desktopPreview.scale->Js.Float.toString})`,
+                  ~transformOrigin="top left",
+                  (),
+                )}
+                className="absolute inset-0"
+              />
+              <EditorCanvas
+                transcriptionInProgress
+                subtitles=subtitlesManager.activeSubtitles
+                subtitlesManager
+                width=ctx.videoMeta.width
+                height=ctx.videoMeta.height
+                style={ReactDOMStyle.make(
+                  ~width=`${ctx.videoMeta.width->Int.toString}px`,
+                  ~height=`${ctx.videoMeta.height->Int.toString}px`,
+                  ~transform=`scale(${desktopPreview.scale->Js.Float.toString})`,
+                  ~transformOrigin="top left",
+                  (),
+                )}
+                className="bg-transparent absolute inset-0"
+              />
+            </div>
           </div>
-        })
-        ->Option.getOr(React.null)}
-        <div className="relative" style={UseEditorLayout.sizeToStyle(layout.preview)}>
-          <canvas
-            id="editor-preview"
-            ref={ReactDOM.Ref.domRef(ctx.dom.canvasRef)}
-            width={ctx.videoMeta.width->Int.toString}
-            height={ctx.videoMeta.height->Int.toString}
-            style={ReactDOMStyle.make(
-              ~width=`${ctx.videoMeta.width->Int.toString}px`,
-              ~height=`${ctx.videoMeta.height->Int.toString}px`,
-              ~transform=`scale(${layout.preview.scale->Js.Float.toString})`,
-              (),
-            )}
-            className="bg-black origin-top-left absolute left-0 top-0"
-          />
-          <canvas
-            key={renderCanvasKey->Int.toString}
-            ref={ReactDOM.Ref.domRef(rendererPreviewCanvasRef)}
-            width={ctx.videoMeta.width->Int.toString}
-            height={ctx.videoMeta.height->Int.toString}
-            style={ReactDOMStyle.make(
-              ~width=`${ctx.videoMeta.width->Int.toString}px`,
-              ~height=`${ctx.videoMeta.height->Int.toString}px`,
-              ~transform=`scale(${layout.preview.scale->Js.Float.toString})`,
-              (),
-            )}
-            className="origin-top-left absolute left-0 top-0"
-          />
-          <EditorCanvas
-            transcriptionInProgress
-            subtitles=subtitlesManager.activeSubtitles
-            subtitlesManager
-            width=ctx.videoMeta.width
-            height=ctx.videoMeta.height
-            style={ReactDOMStyle.make(
-              ~width=`${ctx.videoMeta.width->Int.toString}px`,
-              ~height=`${ctx.videoMeta.height->Int.toString}px`,
-              ~transform=`scale(${layout.preview.scale->Js.Float.toString})`,
-              (),
-            )}
-            className="bg-transparent origin-top-left absolute left-0 top-0"
-          />
+          // Timeline below video
+          <div className="shrink-0">
+            {UseEditorLayout.calculateTimelineSize(
+              rightPanelViewport,
+              desktopPreview,
+            )
+            ->Belt.Option.map(sectionSize =>
+              <div
+                style={sectionSize->UseEditorLayout.sizeToStyle}
+                className="shadow-lg w-full bg-zinc-800">
+                <Timeline sectionSize />
+              </div>
+            )
+            ->Option.getOr(React.null)}
+          </div>
         </div>
       </div>
-      {layout.timeLine
-      ->Belt.Option.map(sectionSize =>
-        <div
-          style={sectionSize->UseEditorLayout.sizeToStyle}
-          className="shadow-lg w-screen bg-zinc-800 shrink-0">
-          <Timeline sectionSize />
-        </div>
-      )
-      ->Utils.Option.unwrapOr(React.null)}
       <Dock render fullScreenToggler subtitlesManager videoFileName />
     </div>
   }

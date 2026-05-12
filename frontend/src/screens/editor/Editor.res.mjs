@@ -104,7 +104,50 @@ var MobileCanvasStyle = {
   make: make
 };
 
+function Editor$SaveStatusBadge(props) {
+  var match;
+  switch (props.saveStatus) {
+    case "error" :
+        match = [
+          "Save failed",
+          "text-red-400"
+        ];
+        break;
+    case "saved" :
+        match = [
+          "Saved",
+          "text-green-400"
+        ];
+        break;
+    case "saving" :
+        match = [
+          "Saving…",
+          "text-zinc-400"
+        ];
+        break;
+    default:
+      match = [
+        "",
+        ""
+      ];
+  }
+  var label = match[0];
+  if (label.length === 0) {
+    return null;
+  } else {
+    return JsxRuntime.jsx("span", {
+                children: label,
+                className: "text-xs font-medium " + match[1]
+              });
+  }
+}
+
+var SaveStatusBadge = {
+  make: Editor$SaveStatusBadge
+};
+
 var make$1 = React.memo(function (props) {
+      var onBack = props.onBack;
       var onResetPlayerState = props.onResetPlayerState;
       var videoFileName = props.videoFileName;
       var renderCanvasKey = props.renderCanvasKey;
@@ -114,8 +157,9 @@ var make$1 = React.memo(function (props) {
       var match = Hooks.useToggle(false);
       var fullScreenToggler = match[1];
       var ctx = EditorContext.useEditorContext();
-      var layout = Hooks.useEditorLayout(match[0]);
+      Hooks.useEditorLayout(match[0]);
       var isMobile = useIsMobile();
+      var viewportSize = Hooks.useDimensions();
       var videoWidth = ctx.videoMeta.width;
       var videoHeight = ctx.videoMeta.height;
       React.useEffect((function () {
@@ -206,9 +250,46 @@ var make$1 = React.memo(function (props) {
             ],
             className: "flex flex-col h-full overflow-hidden"
           });
+      var header = JsxRuntime.jsxs("header", {
+            children: [
+              JsxRuntime.jsxs("button", {
+                    children: [
+                      JsxRuntime.jsx("svg", {
+                            children: JsxRuntime.jsx("path", {
+                                  d: "M15 19l-7-7 7-7",
+                                  strokeLinecap: "round",
+                                  strokeLinejoin: "round"
+                                }),
+                            className: "h-4 w-4",
+                            fill: "none",
+                            stroke: "currentColor",
+                            strokeWidth: "2",
+                            viewBox: "0 0 24 24"
+                          }),
+                      "Back"
+                    ],
+                    className: "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white",
+                    onClick: (function (param) {
+                        onBack();
+                      })
+                  }),
+              JsxRuntime.jsx("span", {
+                    className: "h-4 w-px bg-zinc-700"
+                  }),
+              JsxRuntime.jsx("p", {
+                    children: props.projectTitle,
+                    className: "flex-1 truncate text-sm font-medium text-white"
+                  }),
+              JsxRuntime.jsx(Editor$SaveStatusBadge, {
+                    saveStatus: props.saveStatus
+                  })
+            ],
+            className: "shrink-0 flex items-center gap-3 px-3 py-2 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm"
+          });
       if (isMobile) {
         return JsxRuntime.jsxs("div", {
                     children: [
+                      header,
                       JsxRuntime.jsx("div", {
                             children: JsxRuntime.jsx(Tabs.make, {
                                   tabs: [
@@ -255,125 +336,128 @@ var make$1 = React.memo(function (props) {
                     className: "w-screen h-dvh bg-zinc-950 flex flex-col fixed inset-0 overflow-hidden",
                     id: "fframes-editor"
                   });
-      } else {
-        return JsxRuntime.jsxs("div", {
-                    children: [
-                      JsxRuntime.jsxs("div", {
-                            children: [
-                              Core__Option.getOr(Belt_Option.map(layout.mediaControls, (function (size) {
-                                          var showSideBySide = size.width >= 770.0;
-                                          return JsxRuntime.jsx("div", {
-                                                      children: showSideBySide ? JsxRuntime.jsxs("div", {
-                                                              children: [
-                                                                JsxRuntime.jsx("div", {
-                                                                      children: JsxRuntime.jsx(ChunksList.make, {
-                                                                            subtitlesManager: subtitlesManager,
-                                                                            title: subtitlesTitle
-                                                                          }),
-                                                                      className: "pr-6 flex-1 flex max-h-full overflow-auto flex-col justify-center gap-y-4"
-                                                                    }),
-                                                                JsxRuntime.jsxs("div", {
-                                                                      children: [
-                                                                        JsxRuntime.jsx("h2", {
-                                                                              children: styleTitle,
-                                                                              className: "mx-auto text-xl"
-                                                                            }),
-                                                                        JsxRuntime.jsx(StyleEditor.make, {})
-                                                                      ],
-                                                                      className: "pl-6 flex-1 flex flex-col gap-y-4 overflow-auto"
-                                                                    })
-                                                              ],
-                                                              className: "flex overflow-hidden pl-4 flex-1 min-h-0 max-h-full divide-x divide-zinc-700"
-                                                            }) : JsxRuntime.jsx("div", {
-                                                              children: JsxRuntime.jsx(Tabs.make, {
-                                                                    tabs: [
-                                                                      {
-                                                                        id: "subtitles",
-                                                                        name: subtitlesTitle,
-                                                                        content: JsxRuntime.jsx(ChunksList.make, {
-                                                                              subtitlesManager: subtitlesManager,
-                                                                              title: null
-                                                                            })
-                                                                      },
-                                                                      {
-                                                                        id: "style",
-                                                                        name: styleTitle,
-                                                                        content: JsxRuntime.jsx(StyleEditor.make, {})
-                                                                      }
-                                                                    ],
-                                                                    defaultIndex: 0
-                                                                  }),
-                                                              className: "flex-1 min-h-0 flex flex-col pt-1 px-2 gap-2 overflow-hidden"
-                                                            }),
-                                                      className: "@container col-span-2 pt-2 flex flex-col border-r border-zinc-800 overflow-hidden",
-                                                      style: UseEditorLayout.sizeToStyle(size)
-                                                    });
-                                        })), null),
-                              JsxRuntime.jsxs("div", {
-                                    children: [
-                                      JsxRuntime.jsx("canvas", {
-                                            ref: Caml_option.some(ctx.dom.canvasRef),
-                                            className: "bg-black origin-top-left absolute left-0 top-0",
-                                            id: "editor-preview",
-                                            style: {
-                                              height: ctx.videoMeta.height.toString() + "px",
-                                              width: ctx.videoMeta.width.toString() + "px",
-                                              transform: "scale(" + layout.preview.scale.toString() + ")"
-                                            },
-                                            height: ctx.videoMeta.height.toString(),
-                                            width: ctx.videoMeta.width.toString()
-                                          }),
-                                      JsxRuntime.jsx("canvas", {
-                                            ref: Caml_option.some(rendererPreviewCanvasRef),
-                                            className: "origin-top-left absolute left-0 top-0",
-                                            style: {
-                                              height: ctx.videoMeta.height.toString() + "px",
-                                              width: ctx.videoMeta.width.toString() + "px",
-                                              transform: "scale(" + layout.preview.scale.toString() + ")"
-                                            },
-                                            height: ctx.videoMeta.height.toString(),
-                                            width: ctx.videoMeta.width.toString()
-                                          }, renderCanvasKey.toString()),
-                                      JsxRuntime.jsx(EditorCanvas.make, {
-                                            transcriptionInProgress: transcriptionInProgress,
-                                            width: ctx.videoMeta.width,
-                                            height: ctx.videoMeta.height,
-                                            style: {
-                                              height: ctx.videoMeta.height.toString() + "px",
-                                              width: ctx.videoMeta.width.toString() + "px",
-                                              transform: "scale(" + layout.preview.scale.toString() + ")"
-                                            },
-                                            className: "bg-transparent origin-top-left absolute left-0 top-0",
-                                            subtitles: subtitlesManager.activeSubtitles,
-                                            subtitlesManager: subtitlesManager
-                                          })
-                                    ],
-                                    className: "relative",
-                                    style: UseEditorLayout.sizeToStyle(layout.preview)
-                                  })
-                            ],
-                            className: "flex justify-center w-full flex-1 min-h-0 overflow-hidden"
-                          }),
-                      Utils.$$Option.unwrapOr(Belt_Option.map(layout.timeLine, (function (sectionSize) {
-                                  return JsxRuntime.jsx("div", {
-                                              children: JsxRuntime.jsx(Timeline.make, {
-                                                    sectionSize: sectionSize
-                                                  }),
-                                              className: "shadow-lg w-screen bg-zinc-800 shrink-0",
-                                              style: UseEditorLayout.sizeToStyle(sectionSize)
-                                            });
-                                })), null),
-                      JsxRuntime.jsx(Dock.make, {
-                            subtitlesManager: subtitlesManager,
-                            render: render,
-                            fullScreenToggler: fullScreenToggler,
-                            videoFileName: videoFileName
-                          })
-                    ],
-                    className: "w-screen h-screen bg-zinc-900 overflow-hidden relative flex flex-col",
-                    id: "fframes-editor"
-                  });
       }
+      var rightPanelViewport_width = viewportSize.width - 460 | 0;
+      var rightPanelViewport_height = viewportSize.height;
+      var rightPanelViewport = {
+        width: rightPanelViewport_width,
+        height: rightPanelViewport_height
+      };
+      var desktopPreview = UseEditorLayout.calculatePreviewSize(rightPanelViewport, ctx.videoMeta, 0, UseEditorLayout.min_timeline_height);
+      return JsxRuntime.jsxs("div", {
+                  children: [
+                    header,
+                    JsxRuntime.jsxs("div", {
+                          children: [
+                            JsxRuntime.jsx("div", {
+                                  children: JsxRuntime.jsx(Tabs.make, {
+                                        tabs: [
+                                          {
+                                            id: "subtitles",
+                                            name: subtitlesTitle,
+                                            content: JsxRuntime.jsx("div", {
+                                                  children: JsxRuntime.jsx(ChunksList.make, {
+                                                        subtitlesManager: subtitlesManager,
+                                                        title: null
+                                                      }),
+                                                  className: "px-4 py-3 h-full"
+                                                })
+                                          },
+                                          {
+                                            id: "style",
+                                            name: styleTitle,
+                                            content: JsxRuntime.jsx("div", {
+                                                  children: JsxRuntime.jsx(StyleEditor.make, {}),
+                                                  className: "px-4 py-3"
+                                                })
+                                          }
+                                        ],
+                                        defaultIndex: 0,
+                                        className: "outline-none"
+                                      }),
+                                  className: "w-[460px] shrink-0 flex flex-col border-r border-zinc-800 overflow-hidden bg-zinc-950"
+                                }),
+                            JsxRuntime.jsxs("div", {
+                                  children: [
+                                    JsxRuntime.jsx("div", {
+                                          children: JsxRuntime.jsxs("div", {
+                                                children: [
+                                                  JsxRuntime.jsx("canvas", {
+                                                        ref: Caml_option.some(ctx.dom.canvasRef),
+                                                        className: "bg-black absolute inset-0",
+                                                        id: "editor-preview",
+                                                        style: {
+                                                          height: ctx.videoMeta.height.toString() + "px",
+                                                          width: ctx.videoMeta.width.toString() + "px",
+                                                          transform: "scale(" + desktopPreview.scale.toString() + ")",
+                                                          transformOrigin: "top left"
+                                                        },
+                                                        height: ctx.videoMeta.height.toString(),
+                                                        width: ctx.videoMeta.width.toString()
+                                                      }),
+                                                  JsxRuntime.jsx("canvas", {
+                                                        ref: Caml_option.some(rendererPreviewCanvasRef),
+                                                        className: "absolute inset-0",
+                                                        style: {
+                                                          height: ctx.videoMeta.height.toString() + "px",
+                                                          width: ctx.videoMeta.width.toString() + "px",
+                                                          transform: "scale(" + desktopPreview.scale.toString() + ")",
+                                                          transformOrigin: "top left"
+                                                        },
+                                                        height: ctx.videoMeta.height.toString(),
+                                                        width: ctx.videoMeta.width.toString()
+                                                      }, renderCanvasKey.toString()),
+                                                  JsxRuntime.jsx(EditorCanvas.make, {
+                                                        transcriptionInProgress: transcriptionInProgress,
+                                                        width: ctx.videoMeta.width,
+                                                        height: ctx.videoMeta.height,
+                                                        style: {
+                                                          height: ctx.videoMeta.height.toString() + "px",
+                                                          width: ctx.videoMeta.width.toString() + "px",
+                                                          transform: "scale(" + desktopPreview.scale.toString() + ")",
+                                                          transformOrigin: "top left"
+                                                        },
+                                                        className: "bg-transparent absolute inset-0",
+                                                        subtitles: subtitlesManager.activeSubtitles,
+                                                        subtitlesManager: subtitlesManager
+                                                      })
+                                                ],
+                                                className: "relative shrink-0 bg-black",
+                                                style: {
+                                                  height: (ctx.videoMeta.height * desktopPreview.scale).toString() + "px",
+                                                  width: (ctx.videoMeta.width * desktopPreview.scale).toString() + "px"
+                                                }
+                                              }),
+                                          className: "flex-1 flex items-center justify-center min-h-0 p-4"
+                                        }),
+                                    JsxRuntime.jsx("div", {
+                                          children: Core__Option.getOr(Belt_Option.map(UseEditorLayout.calculateTimelineSize(rightPanelViewport, desktopPreview), (function (sectionSize) {
+                                                      return JsxRuntime.jsx("div", {
+                                                                  children: JsxRuntime.jsx(Timeline.make, {
+                                                                        sectionSize: sectionSize
+                                                                      }),
+                                                                  className: "shadow-lg w-full bg-zinc-800",
+                                                                  style: UseEditorLayout.sizeToStyle(sectionSize)
+                                                                });
+                                                    })), null),
+                                          className: "shrink-0"
+                                        })
+                                  ],
+                                  className: "flex-1 flex flex-col min-h-0 overflow-hidden bg-zinc-950"
+                                })
+                          ],
+                          className: "flex flex-1 min-h-0 overflow-hidden"
+                        }),
+                    JsxRuntime.jsx(Dock.make, {
+                          subtitlesManager: subtitlesManager,
+                          render: render,
+                          fullScreenToggler: fullScreenToggler,
+                          videoFileName: videoFileName
+                        })
+                  ],
+                  className: "w-screen h-screen bg-zinc-950 overflow-hidden flex flex-col",
+                  id: "fframes-editor"
+                });
     });
 
 export {
@@ -382,6 +466,7 @@ export {
   calcMobilePreviewScale ,
   MobileSeekSlider ,
   MobileCanvasStyle ,
+  SaveStatusBadge ,
   make$1 as make,
 }
 /*  Not a pure module */
