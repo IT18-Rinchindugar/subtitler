@@ -74,7 +74,9 @@ export function generateAss(cues: SubtitleCue[], style: SubtitleStyle, _videoDur
     rawX;
   const posY = style.y ?? 0;
 
-  let styleLines = `Style: Default,${fontName},${fontSize},${primaryColor},${primaryColor},${outlineColor},&H80000000,${bold},0,0,0,100,100,0,0,1,${outlineWidth},0,7,0,0,0,1`;
+  // BackColour: fully transparent (&HFF000000) — only matters for BorderStyle=3 box mode,
+  // which is not used on Default. Keeping it transparent avoids accidental shadow tinting.
+  let styleLines = `Style: Default,${fontName},${fontSize},${primaryColor},${primaryColor},${outlineColor},&HFF000000,${bold},0,0,0,100,100,0,0,1,${outlineWidth},0,7,0,0,0,1`;
 
   if (style.showBackground && style.background) {
     const bg = style.background;
@@ -92,6 +94,8 @@ PlayResX: ${videoWidth}
 PlayResY: ${videoHeight}
 ScaledBorderAndShadow: yes
 WrapStyle: 1
+Timer: 100.0000
+Collisions: Normal
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding

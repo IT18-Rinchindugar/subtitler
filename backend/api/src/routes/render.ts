@@ -144,16 +144,24 @@ async function processRenderJob(
         .replace(/\]/g, "\\]");
       const escapedFontsDir = fontsDir
         .replace(/\\/g, "/")
-        .replace(/'/g, "\\'");
+        .replace(/'/g, "\\'")
+        .replace(/\[/g, "\\[")
+        .replace(/\]/g, "\\]")
+        .replace(/:/g, "\\:");
       ffmpeg(videoPath)
-        .videoFilters(`ass='${escapedAssPath}':fontsdir='${escapedFontsDir}'`)
+        .videoFilters(`ass='${escapedAssPath}':fontsdir='${escapedFontsDir}':shaping=1`)
         .outputOptions([
           "-c:v libx264",
-          "-preset veryslow",
-          "-crf 14",
+          "-preset slow",
+          "-crf 16",
           "-profile:v high",
           "-level 4.1",
           "-pix_fmt yuv420p",
+          "-tune film",
+          "-x264opts", "no-fast-pskip=1:dct-decimate=0:rc-lookahead=60",
+          "-colorspace bt709",
+          "-color_primaries bt709",
+          "-color_trc bt709",
           "-c:a copy",
           "-movflags +faststart",
         ])
