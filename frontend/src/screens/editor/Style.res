@@ -272,42 +272,59 @@ module MakeRendererObservable = (Ctx: Ctx) => UseObservable.MakeObserver({
     Ctx.videoMeta.height / 7
   }
 
-  let initial = {
-    // Video-dependent properties (restore if dimensions match, otherwise calculate fresh)
-    x: if savedPositionMatches {
-      savedPrefs->Option.flatMap(p => p.x)->Option.getOr(defaultX)
-    } else {
-      defaultX
-    },
-    y: if savedPositionMatches {
-      savedPrefs->Option.flatMap(p => p.y)->Option.getOr(defaultY)
-    } else {
-      defaultY
-    },
-    blockSize: {width, height: defaultFontSizePx},
-    fontVariants: all_font_weights,
-    // User preferences (loaded from storage or defaults)
-    fontFamily: savedPrefs->Option.mapOr(defaultPreferences.fontFamily, p => p.fontFamily),
-    fontWeight: savedPrefs->Option.mapOr(defaultPreferences.fontWeight, p => p.fontWeight),
-    fontSizePx: savedPrefs
-    ->Option.map(p => p.fontSizePx)
-    ->Option.filter(size => size > 0)
-    ->Option.getOr(defaultFontSizePx),
-    color: savedPrefs->Option.mapOr(defaultPreferences.color, p => p.color),
-    strokeColor: savedPrefs->Option.flatMap(p => p.strokeColor),
-    strokeWidth: savedPrefs->Option.mapOr(defaultPreferences.strokeWidth, p => p.strokeWidth),
-    align: savedPrefs->Option.mapOr(defaultPreferences.align, p => p.align),
-    showBackground: savedPrefs->Option.mapOr(defaultPreferences.showBackground, p =>
-      p.showBackground
-    ),
-    background: savedPrefs->Option.mapOr(defaultPreferences.background, p => p.background),
-    showWordAnimation: savedPrefs->Option.mapOr(defaultPreferences.showWordAnimation, p =>
-      p.showWordAnimation
-    ),
-    wordAnimation: savedPrefs->Option.mapOr(defaultPreferences.wordAnimation, p => p.wordAnimation),
-    hidePunctuation: savedPrefs->Option.mapOr(defaultPreferences.hidePunctuation, p =>
-      p.hidePunctuation
-    ),
+  // Project styleJson takes priority over localStorage prefs
+  let projectStyle: option<style> = Ctx.initialStyleJson->Option.flatMap(json =>
+    try Some(json->Obj.magic) catch { | _ => None }
+  )
+
+  let initial = switch projectStyle {
+  | Some(ps) => {
+      // Use project style but ensure blockSize and fontVariants are valid
+      let resolvedBlockSize = if ps.blockSize.width > 0 {
+        ps.blockSize
+      } else {
+        {width, height: defaultFontSizePx}
+      }
+      let resolvedFontSizePx = if ps.fontSizePx > 0 { ps.fontSizePx } else { defaultFontSizePx }
+      {...ps, blockSize: resolvedBlockSize, fontSizePx: resolvedFontSizePx, fontVariants: all_font_weights}
+    }
+  | None => {
+      // Video-dependent properties (restore if dimensions match, otherwise calculate fresh)
+      x: if savedPositionMatches {
+        savedPrefs->Option.flatMap(p => p.x)->Option.getOr(defaultX)
+      } else {
+        defaultX
+      },
+      y: if savedPositionMatches {
+        savedPrefs->Option.flatMap(p => p.y)->Option.getOr(defaultY)
+      } else {
+        defaultY
+      },
+      blockSize: {width, height: defaultFontSizePx},
+      fontVariants: all_font_weights,
+      // User preferences (loaded from storage or defaults)
+      fontFamily: savedPrefs->Option.mapOr(defaultPreferences.fontFamily, p => p.fontFamily),
+      fontWeight: savedPrefs->Option.mapOr(defaultPreferences.fontWeight, p => p.fontWeight),
+      fontSizePx: savedPrefs
+      ->Option.map(p => p.fontSizePx)
+      ->Option.filter(size => size > 0)
+      ->Option.getOr(defaultFontSizePx),
+      color: savedPrefs->Option.mapOr(defaultPreferences.color, p => p.color),
+      strokeColor: savedPrefs->Option.flatMap(p => p.strokeColor),
+      strokeWidth: savedPrefs->Option.mapOr(defaultPreferences.strokeWidth, p => p.strokeWidth),
+      align: savedPrefs->Option.mapOr(defaultPreferences.align, p => p.align),
+      showBackground: savedPrefs->Option.mapOr(defaultPreferences.showBackground, p =>
+        p.showBackground
+      ),
+      background: savedPrefs->Option.mapOr(defaultPreferences.background, p => p.background),
+      showWordAnimation: savedPrefs->Option.mapOr(defaultPreferences.showWordAnimation, p =>
+        p.showWordAnimation
+      ),
+      wordAnimation: savedPrefs->Option.mapOr(defaultPreferences.wordAnimation, p => p.wordAnimation),
+      hidePunctuation: savedPrefs->Option.mapOr(defaultPreferences.hidePunctuation, p =>
+        p.hidePunctuation
+      ),
+    }
   }
 
   let reducer = (state: style, action): style => {

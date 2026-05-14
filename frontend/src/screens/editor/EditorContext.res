@@ -79,6 +79,8 @@ let makeEditorContextComponent = (
   ~subtitlesRef: React.ref<array<Subtitles.subtitleCue>>,
   ~canvasRef: React.ref<Js.nullable<Webapi.Dom.Element.t>>,
   ~audioBuffer: option<WebAudio.AudioBuffer.t>,
+  ~initialStyleJson: option<Js.Json.t>=?,
+  (),
 ): module(ReactComponent) => {
   module Ctx: Types.Ctx = {
     let dom: Types.dom = {
@@ -89,6 +91,7 @@ let makeEditorContextComponent = (
     let videoMeta = videoMeta
     let subtitlesRef = subtitlesRef
     let audioBuffer = audioBuffer
+    let initialStyleJson = initialStyleJson
   }
 
   module Context = MakeEditorContext(Ctx)

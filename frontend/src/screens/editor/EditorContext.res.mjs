@@ -70,7 +70,7 @@ function MakeEditorContext(Ctx) {
         };
 }
 
-function makeEditorContextComponent(videoMeta, videoElement, timelineVideoElement, subtitlesRef, canvasRef, audioBuffer) {
+function makeEditorContextComponent(videoMeta, videoElement, timelineVideoElement, subtitlesRef, canvasRef, audioBuffer, initialStyleJson, param) {
   var dom_videoElement = videoElement.current;
   var dom_timelineVideoElement = timelineVideoElement.current;
   var dom = {
@@ -82,7 +82,8 @@ function makeEditorContextComponent(videoMeta, videoElement, timelineVideoElemen
     dom: dom,
     videoMeta: videoMeta,
     subtitlesRef: subtitlesRef,
-    audioBuffer: audioBuffer
+    audioBuffer: audioBuffer,
+    initialStyleJson: initialStyleJson
   };
   var PlayerObserver = Player.MakePlayer(Ctx);
   var StyleObserver = Style.MakeRendererObservable(Ctx);

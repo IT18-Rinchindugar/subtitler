@@ -150,72 +150,92 @@ function MakeRendererObservable(Ctx) {
           }
         }));
   var defaultY = Ctx.videoMeta.width > Ctx.videoMeta.height ? Ctx.videoMeta.height - (Ctx.videoMeta.height / 6 | 0) | 0 : Ctx.videoMeta.height / 7 | 0;
-  var initial_x = savedPositionMatches ? Core__Option.getOr(Core__Option.flatMap(savedPrefs, (function (p) {
-                return p.x;
-              })), center) : center;
-  var initial_y = savedPositionMatches ? Core__Option.getOr(Core__Option.flatMap(savedPrefs, (function (p) {
-                return p.y;
-              })), defaultY) : defaultY;
-  var initial_fontFamily = Core__Option.mapOr(savedPrefs, "Inter", (function (p) {
-          return p.fontFamily;
+  var projectStyle = Core__Option.flatMap(Ctx.initialStyleJson, (function (json) {
+          try {
+            return json;
+          }
+          catch (exn){
+            return ;
+          }
         }));
-  var initial_fontWeight = Core__Option.mapOr(savedPrefs, 400, (function (p) {
-          return p.fontWeight;
-        }));
-  var initial_fontSizePx = Core__Option.getOr(Core__Option.filter(Core__Option.map(savedPrefs, (function (p) {
-                  return p.fontSizePx;
-                })), (function (size) {
-              return size > 0;
-            })), defaultFontSizePx);
-  var initial_color = Core__Option.mapOr(savedPrefs, "#ffffff", (function (p) {
-          return p.color;
-        }));
-  var initial_strokeColor = Core__Option.flatMap(savedPrefs, (function (p) {
-          return p.strokeColor;
-        }));
-  var initial_strokeWidth = Core__Option.mapOr(savedPrefs, 1, (function (p) {
-          return p.strokeWidth;
-        }));
-  var initial_align = Core__Option.mapOr(savedPrefs, "Center", (function (p) {
-          return p.align;
-        }));
-  var initial_blockSize = {
-    width: width,
-    height: defaultFontSizePx
-  };
-  var initial_showBackground = Core__Option.mapOr(savedPrefs, false, (function (p) {
-          return p.showBackground;
-        }));
-  var initial_background = Core__Option.mapOr(savedPrefs, defaultBackground, (function (p) {
-          return p.background;
-        }));
-  var initial_showWordAnimation = Core__Option.mapOr(savedPrefs, false, (function (p) {
-          return p.showWordAnimation;
-        }));
-  var initial_wordAnimation = Core__Option.mapOr(savedPrefs, defaultWordAnimation, (function (p) {
-          return p.wordAnimation;
-        }));
-  var initial_hidePunctuation = Core__Option.mapOr(savedPrefs, true, (function (p) {
-          return p.hidePunctuation;
-        }));
-  var initial = {
-    x: initial_x,
-    y: initial_y,
-    fontFamily: initial_fontFamily,
-    fontWeight: initial_fontWeight,
-    fontSizePx: initial_fontSizePx,
-    color: initial_color,
-    strokeColor: initial_strokeColor,
-    strokeWidth: initial_strokeWidth,
-    align: initial_align,
-    blockSize: initial_blockSize,
-    fontVariants: all_font_weights,
-    showBackground: initial_showBackground,
-    background: initial_background,
-    showWordAnimation: initial_showWordAnimation,
-    wordAnimation: initial_wordAnimation,
-    hidePunctuation: initial_hidePunctuation
-  };
+  var initial;
+  if (projectStyle !== undefined) {
+    var resolvedBlockSize = projectStyle.blockSize.width > 0 ? projectStyle.blockSize : ({
+          width: width,
+          height: defaultFontSizePx
+        });
+    var resolvedFontSizePx = projectStyle.fontSizePx > 0 ? projectStyle.fontSizePx : defaultFontSizePx;
+    initial = {
+      x: projectStyle.x,
+      y: projectStyle.y,
+      fontFamily: projectStyle.fontFamily,
+      fontWeight: projectStyle.fontWeight,
+      fontSizePx: resolvedFontSizePx,
+      color: projectStyle.color,
+      strokeColor: projectStyle.strokeColor,
+      strokeWidth: projectStyle.strokeWidth,
+      align: projectStyle.align,
+      blockSize: resolvedBlockSize,
+      fontVariants: all_font_weights,
+      showBackground: projectStyle.showBackground,
+      background: projectStyle.background,
+      showWordAnimation: projectStyle.showWordAnimation,
+      wordAnimation: projectStyle.wordAnimation,
+      hidePunctuation: projectStyle.hidePunctuation
+    };
+  } else {
+    initial = {
+      x: savedPositionMatches ? Core__Option.getOr(Core__Option.flatMap(savedPrefs, (function (p) {
+                    return p.x;
+                  })), center) : center,
+      y: savedPositionMatches ? Core__Option.getOr(Core__Option.flatMap(savedPrefs, (function (p) {
+                    return p.y;
+                  })), defaultY) : defaultY,
+      fontFamily: Core__Option.mapOr(savedPrefs, "Inter", (function (p) {
+              return p.fontFamily;
+            })),
+      fontWeight: Core__Option.mapOr(savedPrefs, 400, (function (p) {
+              return p.fontWeight;
+            })),
+      fontSizePx: Core__Option.getOr(Core__Option.filter(Core__Option.map(savedPrefs, (function (p) {
+                      return p.fontSizePx;
+                    })), (function (size) {
+                  return size > 0;
+                })), defaultFontSizePx),
+      color: Core__Option.mapOr(savedPrefs, "#ffffff", (function (p) {
+              return p.color;
+            })),
+      strokeColor: Core__Option.flatMap(savedPrefs, (function (p) {
+              return p.strokeColor;
+            })),
+      strokeWidth: Core__Option.mapOr(savedPrefs, 1, (function (p) {
+              return p.strokeWidth;
+            })),
+      align: Core__Option.mapOr(savedPrefs, "Center", (function (p) {
+              return p.align;
+            })),
+      blockSize: {
+        width: width,
+        height: defaultFontSizePx
+      },
+      fontVariants: all_font_weights,
+      showBackground: Core__Option.mapOr(savedPrefs, false, (function (p) {
+              return p.showBackground;
+            })),
+      background: Core__Option.mapOr(savedPrefs, defaultBackground, (function (p) {
+              return p.background;
+            })),
+      showWordAnimation: Core__Option.mapOr(savedPrefs, false, (function (p) {
+              return p.showWordAnimation;
+            })),
+      wordAnimation: Core__Option.mapOr(savedPrefs, defaultWordAnimation, (function (p) {
+              return p.wordAnimation;
+            })),
+      hidePunctuation: Core__Option.mapOr(savedPrefs, true, (function (p) {
+              return p.hidePunctuation;
+            }))
+    };
+  }
   var reducer = function (state, action) {
     var newState;
     if (typeof action !== "object") {

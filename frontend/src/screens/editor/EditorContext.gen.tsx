@@ -9,6 +9,8 @@ import type {AudioBuffer_t as WebAudio_AudioBuffer_t} from '../../../src/binding
 
 import type {Dom_Element_t as Webapi_Dom_Element_t} from 'rescript-webapi/src/Webapi.gen';
 
+import type {Json_t as Js_Json_t} from './Js.gen';
+
 import type {action as Player_action} from '../../../src/Player.gen';
 
 import type {changeStyleAction as Style_changeStyleAction} from './Style.gen';
@@ -39,4 +41,4 @@ export type ReactComponent_props<children> = { readonly children: children };
 
 export const useEditorContext: () => editorContext = EditorContextJS.useEditorContext as any;
 
-export const makeEditorContextComponent: (videoMeta:Types_videoMeta, videoElement:{ current: (null | Webapi_Dom_Element_t) }, timelineVideoElement:{ current: (null | Webapi_Dom_Element_t) }, subtitlesRef:{ current: (null | Subtitles_subtitleCue[]) }, canvasRef:{ current: (null | (null | undefined | Webapi_Dom_Element_t)) }, audioBuffer:(undefined | WebAudio_AudioBuffer_t)) => { readonly make: (_1:ReactComponent_props<JSX.Element>) => JSX.Element } = EditorContextJS.makeEditorContextComponent as any;
+export const makeEditorContextComponent: (videoMeta:Types_videoMeta, videoElement:{ current: (null | Webapi_Dom_Element_t) }, timelineVideoElement:{ current: (null | Webapi_Dom_Element_t) }, subtitlesRef:{ current: (null | Subtitles_subtitleCue[]) }, canvasRef:{ current: (null | (null | undefined | Webapi_Dom_Element_t)) }, audioBuffer:(undefined | WebAudio_AudioBuffer_t), initialStyleJson:(undefined | Js_Json_t), param:void) => { readonly make: (_1:ReactComponent_props<JSX.Element>) => JSX.Element } = EditorContextJS.makeEditorContextComponent as any;

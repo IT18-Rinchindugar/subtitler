@@ -559,6 +559,8 @@ export default function EditorPage() {
           subtitlesManager.subtitlesRef,
           canvasRef,
           file?.audioBuffer,
+          project?.styleJson ? (project.styleJson as unknown as any) : undefined,
+          undefined,
         );
         setEditorContext(component);
       }
