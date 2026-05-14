@@ -179,6 +179,18 @@ export interface RenderJobStatus {
   errorMessage?: string;
 }
 
+export interface RenderVersion {
+  id: string;
+  versionNumber: number;
+  createdAt: string;
+  downloadUrl: string | null;
+  styleJson: Record<string, unknown> | null;
+}
+
+export interface RenderHistory {
+  versions: RenderVersion[];
+}
+
 export const renderApi = {
   start: (
     projectId: string,
@@ -189,6 +201,9 @@ export const renderApi = {
 
   getStatus: (projectId: string, jobId: string) =>
     request<RenderJobStatus>("GET", `/render/${projectId}/job/${jobId}`),
+
+  getHistory: (projectId: string) =>
+    request<RenderHistory>("GET", `/render/${projectId}/history`),
 };
 
 // ── S3 direct upload ──────────────────────────────────────────────────────────

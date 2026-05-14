@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import { config } from "../config";
 import { validate } from "../middleware/validate";
+import { generateAndUploadThumbnail } from "../services/thumbnail";
 
 const router = Router();
 
@@ -46,10 +47,11 @@ router.post(
       return;
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.project.update({
+    const project = await prisma.$transaction(async (tx) => {
+      const updated = await tx.project.update({
         where: { id: body.projectId },
         data: { status: "ready" },
+        select: { id: true, videoS3Key: true, videoFilename: true },
       });
 
       if (body.cues && body.cues.length > 0) {
@@ -65,9 +67,21 @@ router.post(
           })),
         });
       }
+
+      return updated;
     });
 
     res.json({ ok: true });
+
+    // Generate thumbnail asynchronously — don't block the response
+    generateAndUploadThumbnail(project.id, project.videoS3Key, project.videoFilename)
+      .then((thumbKey) =>
+        prisma.project.update({
+          where: { id: project.id },
+          data: { thumbnailS3Key: thumbKey },
+        })
+      )
+      .catch((err) => console.error("Thumbnail generation failed:", err));
   }
 );
 

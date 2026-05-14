@@ -66,6 +66,36 @@ router.post("/:projectId", authenticate, validate(startSchema), async (req, res)
   res.json({ jobId: job.id, status: "processing" });
 });
 
+// GET /api/render/:projectId/history — list all completed render versions
+router.get("/:projectId/history", authenticate, async (req, res) => {
+  const userId = (req as AuthRequest).userId;
+  const { projectId } = req.params;
+
+  const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  const jobs = await prisma.renderJob.findMany({
+    where: { projectId, status: "done" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, createdAt: true, outputS3Key: true, styleJson: true },
+  });
+
+  const versions = await Promise.all(
+    jobs.map(async (job, i) => ({
+      id: job.id,
+      versionNumber: i + 1,
+      createdAt: job.createdAt,
+      downloadUrl: job.outputS3Key ? await generateDownloadUrl(job.outputS3Key) : null,
+      styleJson: job.styleJson,
+    }))
+  );
+
+  res.json({ versions });
+});
+
 // GET /api/render/:projectId/job/:jobId — poll render job status
 router.get("/:projectId/job/:jobId", authenticate, async (req, res) => {
   const userId = (req as AuthRequest).userId;

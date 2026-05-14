@@ -6,6 +6,7 @@ import clsx from "clsx";
 import { projectsApi, uploadApi, uploadFileToS3, getVideoMetadata, type ProjectSummary } from "../../api/client";
 import { useAuth } from "../../contexts/AuthContext";
 import { Spinner } from "../../ui/Spinner";
+import { RenderHistoryModal } from "./RenderHistoryModal";
 
 function StatusBadge({ status }: { status: ProjectSummary["status"] }) {
   return (
@@ -32,11 +33,13 @@ function ProjectCard({
   onClick,
   onDelete,
   onRename,
+  onShowHistory,
 }: {
   project: ProjectSummary;
   onClick: () => void;
   onDelete: () => void;
   onRename: (newTitle: string) => void;
+  onShowHistory: () => void;
 }) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(project.title);
@@ -81,6 +84,15 @@ function ProjectCard({
         >
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 16H9v-3z" />
+          </svg>
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onShowHistory(); }}
+          title="Render history"
+          className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-800/90 text-zinc-400 backdrop-blur-sm transition-colors hover:bg-zinc-700 hover:text-white"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </button>
         <button
@@ -215,6 +227,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [deleteConfirm, setDeleteConfirm] = React.useState<string | null>(null);
+  const [historyProject, setHistoryProject] = React.useState<ProjectSummary | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["projects"],
@@ -296,6 +309,7 @@ export default function DashboardPage() {
                 onClick={() => navigate({ to: `/editor/${project.id}` })}
                 onDelete={() => setDeleteConfirm(project.id)}
                 onRename={(title) => renameMutation.mutate({ projectId: project.id, title })}
+                onShowHistory={() => setHistoryProject(project)}
               />
             ))}
           </div>
@@ -307,6 +321,16 @@ export default function DashboardPage() {
           </p>
         )}
       </main>
+
+      {/* Render history modal */}
+      {historyProject && (
+        <RenderHistoryModal
+          projectId={historyProject.id}
+          projectTitle={historyProject.title}
+          currentStyle={null}
+          onClose={() => setHistoryProject(null)}
+        />
+      )}
 
       {/* Delete confirmation dialog */}
       {deleteConfirm && (
