@@ -294,7 +294,10 @@ function Dock(props) {
       });
   var startRender = Hooks.useEvent(function () {
         playerDispatch("StopForRender");
-        Core__Promise.$$catch(render(context.getImmediateStyleState(), VideoExportFormatDropdown.formatToString(exportSettings.format), VideoExportFormatDropdown.videoCodecToString(exportSettings.videoCodec), VideoExportFormatDropdown.audioCodecToString(exportSettings.audioCodec)), (function (param) {
+        var match = exportSettings.renderMode;
+        var renderModeStr;
+        renderModeStr = match === "ClientRender" ? "client" : "server";
+        Core__Promise.$$catch(render(context.getImmediateStyleState(), VideoExportFormatDropdown.formatToString(exportSettings.format), VideoExportFormatDropdown.videoCodecToString(exportSettings.videoCodec), VideoExportFormatDropdown.audioCodecToString(exportSettings.audioCodec), renderModeStr), (function (param) {
                 return Promise.resolve(playerDispatch("AbortRender"));
               }));
       });
@@ -405,7 +408,8 @@ function Dock(props) {
                         label: "Render video",
                         className: "whitespace-nowrap font-medium hover:!scale-100 md:hover:!scale-105 md:hover:!bg-orange-400 px-2 md:px-4",
                         highlight: true
-                      })
+                      }),
+                  hasProjectId: Core__Option.isSome(props.projectId)
                 })
           ]
         });

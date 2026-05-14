@@ -166,6 +166,31 @@ export const projectsApi = {
     request<ProjectStatus>("GET", `/projects/${projectId}/status`),
 };
 
+// ── Server render (FFmpeg + ASS) ──────────────────────────────────────────────
+
+export interface RenderJobStarted {
+  jobId: string;
+  status: "processing";
+}
+
+export interface RenderJobStatus {
+  status: "processing" | "done" | "error";
+  downloadUrl?: string;
+  errorMessage?: string;
+}
+
+export const renderApi = {
+  start: (
+    projectId: string,
+    cues: Array<{ text: string; startTime: number; endTime: number | null }>,
+    style?: Record<string, unknown>,
+  ) =>
+    request<RenderJobStarted>("POST", `/render/${projectId}`, { cues, style }),
+
+  getStatus: (projectId: string, jobId: string) =>
+    request<RenderJobStatus>("GET", `/render/${projectId}/job/${jobId}`),
+};
+
 // ── S3 direct upload ──────────────────────────────────────────────────────────
 
 export async function uploadFileToS3(

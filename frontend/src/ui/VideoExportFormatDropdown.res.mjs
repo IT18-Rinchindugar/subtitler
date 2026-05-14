@@ -284,11 +284,16 @@ function makeDefaultSettings() {
   return {
           format: "MP4",
           videoCodec: "AVC",
-          audioCodec: "AAC"
+          audioCodec: "AAC",
+          renderMode: "ClientRender"
         };
 }
 
 function settingsToLabel(settings) {
+  var match = settings.renderMode;
+  if (match !== "ClientRender") {
+    return "Server / FFmpeg + ASS";
+  }
   var formatLabel = formatToLabel(settings.format);
   var videoLabel = videoCodecToLabel(settings.videoCodec);
   return formatLabel + " / " + videoLabel;
@@ -475,14 +480,24 @@ var AudioCodecSelector = {
 };
 
 function VideoExportFormatDropdown(props) {
+  var __hasProjectId = props.hasProjectId;
   var onRender = props.onRender;
   var onSettingsChange = props.onSettingsChange;
   var settings = props.settings;
+  var hasProjectId = __hasProjectId !== undefined ? __hasProjectId : false;
   var supportedCodecs = UseSupportedCodecs.useSupportedCodecs(undefined, undefined, undefined);
   var match = React.useState(function () {
         return false;
       });
   var setIsOpen = match[1];
+  var handleRenderModeChange = function (mode) {
+    onSettingsChange({
+          format: settings.format,
+          videoCodec: settings.videoCodec,
+          audioCodec: settings.audioCodec,
+          renderMode: mode
+        });
+  };
   var handleFormatChange = function (format) {
     var formatVideoCodecs = getSupportedVideoCodecs(format);
     var formatAudioCodecs = getSupportedAudioCodecs(format);
@@ -507,21 +522,24 @@ function VideoExportFormatDropdown(props) {
     onSettingsChange({
           format: format,
           videoCodec: newVideoCodec,
-          audioCodec: newAudioCodec
+          audioCodec: newAudioCodec,
+          renderMode: settings.renderMode
         });
   };
   var handleVideoCodecChange = function (videoCodec) {
     onSettingsChange({
           format: settings.format,
           videoCodec: videoCodec,
-          audioCodec: settings.audioCodec
+          audioCodec: settings.audioCodec,
+          renderMode: settings.renderMode
         });
   };
   var handleAudioCodecChange = function (audioCodec) {
     onSettingsChange({
           format: settings.format,
           videoCodec: settings.videoCodec,
-          audioCodec: audioCodec
+          audioCodec: audioCodec,
+          renderMode: settings.renderMode
         });
   };
   var handleRenderClick = function () {
@@ -542,44 +560,117 @@ function VideoExportFormatDropdown(props) {
                               children: "Export Video",
                               className: "text-xl"
                             }),
-                        JsxRuntime.jsx(DropdownMenu.Label.make, {
-                              children: "This will render subtitled video locally using your browser and save it on the disc. Codecs and containers support here is managed by your browser.",
-                              className: "text-sm text-gray-400 -mt-1.5 !font-normal"
+                        JsxRuntime.jsxs("div", {
+                              children: [
+                                JsxRuntime.jsx(DropdownMenu.Label.make, {
+                                      children: "Render Engine",
+                                      className: "text-xs text-gray-400"
+                                    }),
+                                JsxRuntime.jsxs("div", {
+                                      children: [
+                                        JsxRuntime.jsxs("button", {
+                                              children: [
+                                                JsxRuntime.jsx("span", {
+                                                      children: "Browser",
+                                                      className: "text-xs font-medium"
+                                                    }),
+                                                JsxRuntime.jsx("span", {
+                                                      children: "WebCodecs, no upload",
+                                                      className: "text-[10px] text-gray-400 leading-tight mt-0.5"
+                                                    })
+                                              ],
+                                              className: "flex flex-col items-start px-3 py-2 rounded-lg border text-left transition-colors " + (
+                                                settings.renderMode === "ClientRender" ? "border-orange-500 bg-orange-500/10 text-white" : "border-zinc-700 bg-zinc-800/50 text-zinc-300 hover:border-zinc-500"
+                                              ),
+                                              onClick: (function (param) {
+                                                  handleRenderModeChange("ClientRender");
+                                                })
+                                            }),
+                                        JsxRuntime.jsxs("button", {
+                                              children: [
+                                                JsxRuntime.jsx("span", {
+                                                      children: "Server / FFmpeg",
+                                                      className: "text-xs font-medium"
+                                                    }),
+                                                JsxRuntime.jsx("span", {
+                                                      children: hasProjectId ? "ASS subtitles, best quality" : "Will upload & render",
+                                                      className: "text-[10px] text-gray-400 leading-tight mt-0.5"
+                                                    })
+                                              ],
+                                              className: "flex flex-col items-start px-3 py-2 rounded-lg border text-left transition-colors " + (
+                                                settings.renderMode === "ServerRender" ? "border-orange-500 bg-orange-500/10 text-white" : "border-zinc-700 bg-zinc-800/50 text-zinc-300 hover:border-zinc-500"
+                                              ),
+                                              onClick: (function (param) {
+                                                  handleRenderModeChange("ServerRender");
+                                                })
+                                            })
+                                      ],
+                                      className: "grid grid-cols-2 gap-1.5"
+                                    }),
+                                !hasProjectId && settings.renderMode === "ServerRender" ? JsxRuntime.jsx("p", {
+                                        children: "Video will be uploaded before rendering.",
+                                        className: "text-[10px] text-gray-500 px-1 pt-1"
+                                      }) : null
+                              ],
+                              className: "space-y-1 px-1 pb-1"
                             }),
-                        supportedCodecs.loading ? JsxRuntime.jsx("div", {
-                                children: "Detecting supported codecs...",
-                                className: "px-2 py-1 text-xs text-gray-400"
-                              }) : null,
-                        JsxRuntime.jsx(DropdownMenu.Separator.make, {}),
-                        JsxRuntime.jsx(VideoExportFormatDropdown$FormatSelector, {
-                              selectedFormat: settings.format,
-                              onFormatChange: handleFormatChange
-                            }),
-                        JsxRuntime.jsx(DropdownMenu.Separator.make, {}),
-                        JsxRuntime.jsx(VideoExportFormatDropdown$VideoCodecSelector, {
-                              selectedFormat: settings.format,
-                              selectedCodec: settings.videoCodec,
-                              onCodecChange: handleVideoCodecChange,
-                              browserSupportedCodecs: supportedCodecs.videoCodecs
-                            }),
-                        JsxRuntime.jsx(DropdownMenu.Separator.make, {}),
-                        JsxRuntime.jsx(VideoExportFormatDropdown$AudioCodecSelector, {
-                              selectedFormat: settings.format,
-                              selectedCodec: settings.audioCodec,
-                              onCodecChange: handleAudioCodecChange,
-                              browserSupportedCodecs: supportedCodecs.audioCodecs
-                            }),
-                        JsxRuntime.jsx(DropdownMenu.Separator.make, {}),
+                        settings.renderMode === "ClientRender" ? JsxRuntime.jsxs(JsxRuntime.Fragment, {
+                                children: [
+                                  supportedCodecs.loading ? JsxRuntime.jsx("div", {
+                                          children: "Detecting supported codecs...",
+                                          className: "px-2 py-1 text-xs text-gray-400"
+                                        }) : null,
+                                  JsxRuntime.jsx(DropdownMenu.Separator.make, {}),
+                                  JsxRuntime.jsx(VideoExportFormatDropdown$FormatSelector, {
+                                        selectedFormat: settings.format,
+                                        onFormatChange: handleFormatChange
+                                      }),
+                                  JsxRuntime.jsx(DropdownMenu.Separator.make, {}),
+                                  JsxRuntime.jsx(VideoExportFormatDropdown$VideoCodecSelector, {
+                                        selectedFormat: settings.format,
+                                        selectedCodec: settings.videoCodec,
+                                        onCodecChange: handleVideoCodecChange,
+                                        browserSupportedCodecs: supportedCodecs.videoCodecs
+                                      }),
+                                  JsxRuntime.jsx(DropdownMenu.Separator.make, {}),
+                                  JsxRuntime.jsx(VideoExportFormatDropdown$AudioCodecSelector, {
+                                        selectedFormat: settings.format,
+                                        selectedCodec: settings.audioCodec,
+                                        onCodecChange: handleAudioCodecChange,
+                                        browserSupportedCodecs: supportedCodecs.audioCodecs
+                                      }),
+                                  JsxRuntime.jsx(DropdownMenu.Separator.make, {})
+                                ]
+                              }) : JsxRuntime.jsxs(JsxRuntime.Fragment, {
+                                children: [
+                                  JsxRuntime.jsx(DropdownMenu.Separator.make, {}),
+                                  JsxRuntime.jsxs("div", {
+                                        children: [
+                                          JsxRuntime.jsx("p", {
+                                                children: "Output: MP4 (H.264 + AAC)"
+                                              }),
+                                          JsxRuntime.jsx("p", {
+                                                children: "Quality: CRF 18 (visually lossless)"
+                                              }),
+                                          JsxRuntime.jsx("p", {
+                                                children: "Subtitles: ASS burned in"
+                                              })
+                                        ],
+                                        className: "px-3 py-2 text-xs text-gray-400 space-y-0.5"
+                                      }),
+                                  JsxRuntime.jsx(DropdownMenu.Separator.make, {})
+                                ]
+                              }),
                         JsxRuntime.jsx("div", {
                               children: JsxRuntime.jsxs("button", {
                                     children: [
-                                      "Start rendering",
+                                      settings.renderMode === "ServerRender" ? "Render on server" : "Start rendering",
                                       JsxRuntime.jsx(Outline.SparklesIcon, {
                                             className: "size-5"
                                           })
                                     ],
                                     className: "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-white bg-gradient-to-tr from-amber-500/90 via-orange-500/90 to-fuchsia-400/80 hover:from-orange-300/80 hover:to-fuchsia-200/80 focus-visible:!ring-white transition-all shadow-lg shadow-orange-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed",
-                                    disabled: supportedCodecs.loading,
+                                    disabled: settings.renderMode === "ClientRender" && supportedCodecs.loading,
                                     onClick: (function (param) {
                                         handleRenderClick();
                                       })

@@ -26,6 +26,7 @@ import {
   uploadApi,
   uploadFileToS3,
   getVideoMetadata,
+  renderApi,
   type ProjectDetail,
   type SubtitleCue,
   type WordChunk,
@@ -143,8 +144,9 @@ export default function EditorPage() {
   const liveStyleJsonRef = React.useRef<Record<string, unknown> | null>(null);
   const [styleVersion, setStyleVersion] = React.useState(0);
 
-  const [renderState, setRenderState] = React.useState<"idle" | "rendering" | "done" | "error">("idle");
+  const [renderState, setRenderState] = React.useState<"idle" | "rendering" | "done" | "error" | "server_rendering" | "server_done">("idle");
   const [renderError, setRenderError] = React.useState<string | null>(null);
+  const [serverDownloadUrl, setServerDownloadUrl] = React.useState<string | null>(null);
   const resetPlayerStateRef = React.useRef<(() => void) | null>(null);
   const [renderCanvasKey, setRenderCanvasKey] = React.useState(0);
 
@@ -346,14 +348,97 @@ export default function EditorPage() {
 
   const handleBackToEditor = React.useCallback(() => {
     setRenderState("idle");
+    setServerDownloadUrl(null);
     resetPlayerStateRef.current?.();
     setRenderCanvasKey((k) => k + 1);
   }, []);
 
   const render = React.useCallback(
-    async (style: style, outputFormat: string = "mp4", videoCodec?: string, audioCodec?: string) => {
+    async (style: style, outputFormat: string = "mp4", videoCodec?: string, audioCodec?: string, renderMode: string = "client") => {
       log("video_render_started");
       if (!file) return Promise.reject(new Error("No file"));
+
+      // ── Server render path ────────────────────────────────────────────────
+      if (renderMode === "server") {
+        const token = localStorage.getItem("subtitle_app_token");
+        if (!token) {
+          setRenderError("Sign in to use server render.");
+          setRenderState("error");
+          return;
+        }
+
+        setRenderState("server_rendering");
+        setServerDownloadUrl(null);
+
+        try {
+          // If no project yet, upload the video first then save cues
+          let pid = projectId;
+          if (!pid) {
+            if (!file.file) {
+              setRenderError("Original video file is not available for upload.");
+              setRenderState("error");
+              return;
+            }
+            const meta = await getVideoMetadata(file.file);
+            const { projectId: newPid, uploadUrl } = await uploadApi.getPresignedUrl(
+              file.file.name, file.file.type, file.file.size, language
+            );
+            await uploadFileToS3(uploadUrl, file.file);
+            await uploadApi.complete(newPid, meta.duration, meta.width, meta.height);
+            pid = newPid;
+            // Navigate so the URL reflects the new project and projectId state updates
+            navigate({ to: `/editor/${newPid}` });
+          }
+
+          const cues = subtitlesManager.activeSubtitles.map((c: any) => ({
+            text: c.text,
+            startTime: c.timestamp[0],
+            endTime: c.timestamp[1] ?? null,
+          }));
+
+          // Save current cues to the project before rendering
+          await projectsApi.patch(pid, {
+            cues: subtitlesManager.activeSubtitles.map((c: any) => ({
+              text: c.text,
+              timestamp: c.timestamp,
+            })),
+            styleJson: style as unknown as Record<string, unknown>,
+          });
+
+          const { jobId } = await renderApi.start(
+            pid,
+            cues,
+            style as unknown as Record<string, unknown>,
+          );
+
+          const poll = async () => {
+            while (true) {
+              await new Promise((r) => setTimeout(r, 3000));
+              const status = await renderApi.getStatus(pid!, jobId);
+              if (status.status === "done" && status.downloadUrl) {
+                setServerDownloadUrl(status.downloadUrl);
+                setRenderState("server_done");
+                log("video_rendered");
+                return;
+              }
+              if (status.status === "error") {
+                setRenderError(status.errorMessage ?? "Server render failed");
+                setRenderState("error");
+                return;
+              }
+            }
+          };
+          poll().catch((e) => {
+            setRenderError(e instanceof Error ? e.message : String(e));
+            setRenderState("error");
+          });
+        } catch (e) {
+          setRenderError(e instanceof Error ? e.message : String(e));
+          setRenderState("error");
+        }
+        return;
+      }
+      // ── Client render path (existing) ────────────────────────────────────
 
       const validFormat: OutputFormat =
         outputFormat === "webm" ? "webm" : outputFormat === "mov" ? "mov" : "mp4";
@@ -581,6 +666,7 @@ export default function EditorPage() {
               videoFileName={file?.name ?? "video"}
               saveStatus={saveStatus}
               projectTitle={file?.name ?? project?.title ?? "Untitled"}
+              projectId={projectId}
               onBack={() => navigate({ to: "/dashboard" })}
               onResetPlayerState={(fn: () => void) => {
                 resetPlayerStateRef.current = fn;
@@ -594,7 +680,7 @@ export default function EditorPage() {
         <div className="fixed inset-0 z-[60] flex flex-col bg-zinc-950 transition duration-300 ease-in data-[closed]:opacity-0">
           {/* Render page header */}
           <header className="flex items-center gap-3 border-b border-zinc-800 px-4 py-3 md:px-6 shrink-0">
-            {renderState !== "rendering" && (
+            {renderState !== "rendering" && renderState !== "server_rendering" && (
               <button
                 onClick={handleBackToEditor}
                 className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
@@ -716,6 +802,56 @@ export default function EditorPage() {
                     Support Author
                   </a>
                 </div>
+                <button
+                  onClick={handleBackToEditor}
+                  className="text-sm text-zinc-500 underline underline-offset-4 transition-colors hover:text-zinc-300"
+                >
+                  ← Back to editor
+                </button>
+              </div>
+            )}
+
+            {renderState === "server_rendering" && (
+              <div className="flex w-full max-w-lg flex-col items-center gap-6">
+                <div className="relative flex h-20 w-20 items-center justify-center">
+                  <Spinner sizeRem={3} />
+                </div>
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
+                    Rendering on server
+                  </h2>
+                  <p className="mt-2 text-sm text-zinc-400">
+                    {projectId
+                      ? "FFmpeg is burning ASS subtitles into your video. This may take a minute."
+                      : "Uploading video then rendering with FFmpeg + ASS subtitles…"}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {renderState === "server_done" && serverDownloadUrl && (
+              <div className="flex max-w-md flex-col items-center gap-6 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
+                  <svg className="h-8 w-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Server Render Complete!</h2>
+                  <p className="mt-2 text-sm text-zinc-400">
+                    Your video was rendered with FFmpeg + ASS subtitles.
+                  </p>
+                </div>
+                <a
+                  href={serverDownloadUrl}
+                  download
+                  className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-orange-500"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download Video
+                </a>
                 <button
                   onClick={handleBackToEditor}
                   className="text-sm text-zinc-500 underline underline-offset-4 transition-colors hover:text-zinc-300"

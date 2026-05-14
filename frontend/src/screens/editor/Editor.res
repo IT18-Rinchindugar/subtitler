@@ -101,6 +101,7 @@ let make = React.memo((
   ~saveStatus: string,
   ~onBack: unit => unit,
   ~projectTitle: string,
+  ~projectId: string=?,
 ) => {
   let (isFullScreen, fullScreenToggler) = Hooks.useToggle(false)
   let ctx = EditorContext.useEditorContext()
@@ -252,7 +253,7 @@ let make = React.memo((
       </div>
       <div
         className="shrink-0 border-t border-zinc-800 bg-zinc-900/95 backdrop-blur-sm flex justify-center py-1">
-        <Dock render fullScreenToggler subtitlesManager videoFileName />
+        <Dock render fullScreenToggler subtitlesManager videoFileName ?projectId />
       </div>
     </div>
   } else {

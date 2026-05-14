@@ -6,6 +6,7 @@ import authRouter from "./routes/auth";
 import uploadRouter from "./routes/upload";
 import projectsRouter from "./routes/projects";
 import internalRouter from "./routes/internal";
+import renderRouter from "./routes/render";
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/upload", uploadRouter);
 app.use("/api/projects", projectsRouter);
 app.use("/api/internal", internalRouter);
+app.use("/api/render", renderRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

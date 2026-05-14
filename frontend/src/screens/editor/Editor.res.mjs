@@ -328,7 +328,8 @@ var make$1 = React.memo(function (props) {
                                   subtitlesManager: subtitlesManager,
                                   render: render,
                                   fullScreenToggler: fullScreenToggler,
-                                  videoFileName: videoFileName
+                                  videoFileName: videoFileName,
+                                  projectId: props.projectId
                                 }),
                             className: "shrink-0 border-t border-zinc-800 bg-zinc-900/95 backdrop-blur-sm flex justify-center py-1"
                           })

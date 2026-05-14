@@ -35,6 +35,20 @@ model Project {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   subtitleCues   SubtitleCue[]
+  renderJobs     RenderJob[]
+}
+
+model RenderJob {
+  id           String   @id @default(uuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status       String   @default("pending") // pending | processing | done | error
+  errorMessage String?
+  outputS3Key  String?
+  cuesJson     Json
+  styleJson    Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model SubtitleCue {

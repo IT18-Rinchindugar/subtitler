@@ -75,7 +75,7 @@ let volumeIcon = volume =>
   }
 
 @react.component
-let make = (~subtitlesManager, ~render, ~fullScreenToggler: Hooks.toggle, ~videoFileName) => {
+let make = (~subtitlesManager, ~render, ~fullScreenToggler: Hooks.toggle, ~videoFileName, ~projectId: string=?) => {
   let context = EditorContext.useEditorContext()
   let (isCollapsed, collapsedToggle) = Hooks.useToggle(false)
   let (player, playerDispatch) = context.usePlayer()
@@ -150,11 +150,16 @@ let make = (~subtitlesManager, ~render, ~fullScreenToggler: Hooks.toggle, ~video
 
   let startRender = Hooks.useEvent(_ => {
     playerDispatch(StopForRender)
+    let renderModeStr = switch exportSettings.renderMode {
+    | ServerRender => "server"
+    | ClientRender => "client"
+    }
     render(
       context.getImmediateStyleState(),
       exportSettings.format->formatToString,
       exportSettings.videoCodec->videoCodecToString,
       exportSettings.audioCodec->audioCodecToString,
+      renderModeStr,
     )
     ->Promise.catch(_ => playerDispatch(AbortRender)->Promise.resolve)
     ->ignore
@@ -253,7 +258,8 @@ let make = (~subtitlesManager, ~render, ~fullScreenToggler: Hooks.toggle, ~video
           onSettingsChange={settings => setExportSettings(_ => settings)}
           onRender={startRender}
           sideOffset={5}
-          align=#end>
+          align=#end
+          hasProjectId={projectId->Option.isSome}>
           <DockButton
             highlight=true
             label="Render video"

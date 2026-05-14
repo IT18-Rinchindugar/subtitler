@@ -161,22 +161,30 @@ let getSupportedAudioCodecs = format =>
   ->Option.map(f => f.supportedAudioCodecs)
   ->Option.getOr([])
 
+type renderMode = ClientRender | ServerRender
+
 type exportSettings = {
   format: videoFormat,
   videoCodec: videoCodec,
   audioCodec: audioCodec,
+  renderMode: renderMode,
 }
 
 let makeDefaultSettings = () => {
   format: MP4,
   videoCodec: AVC,
   audioCodec: AAC,
+  renderMode: ClientRender,
 }
 
 let settingsToLabel = (settings: exportSettings) => {
-  let formatLabel = formatToLabel(settings.format)
-  let videoLabel = videoCodecToLabel(settings.videoCodec)
-  `${formatLabel} / ${videoLabel}`
+  switch settings.renderMode {
+  | ServerRender => "Server / FFmpeg + ASS"
+  | ClientRender =>
+    let formatLabel = formatToLabel(settings.format)
+    let videoLabel = videoCodecToLabel(settings.videoCodec)
+    `${formatLabel} / ${videoLabel}`
+  }
 }
 
 module FormatSelector = {
@@ -333,9 +341,14 @@ let make = (
   ~sideOffset,
   ~align,
   ~children,
+  ~hasProjectId: bool=false,
 ) => {
   let supportedCodecs = UseSupportedCodecs.useSupportedCodecs()
   let (isOpen, setIsOpen) = React.useState(() => false)
+
+  let handleRenderModeChange = mode => {
+    onSettingsChange({...settings, renderMode: mode})
+  }
 
   let handleFormatChange = format => {
     // When format changes, ensure codecs are compatible
@@ -376,6 +389,7 @@ let make = (
       format,
       videoCodec: newVideoCodec,
       audioCodec: newAudioCodec,
+      renderMode: settings.renderMode,
     })
   }
 
@@ -396,39 +410,97 @@ let make = (
     <DropdownMenu.Trigger asChild=true> {children} </DropdownMenu.Trigger>
     <DropdownMenu.Content sideOffset align className="w-80">
       <DropdownMenu.Label className="text-xl"> {"Export Video"->React.string} </DropdownMenu.Label>
-      <DropdownMenu.Label className="text-sm text-gray-400 -mt-1.5 !font-normal">
-        {"This will render subtitled video locally using your browser and save it on the disc. Codecs and containers support here is managed by your browser."->React.string}
-      </DropdownMenu.Label>
-      {if supportedCodecs.loading {
-        <div className="px-2 py-1 text-xs text-gray-400">
-          {"Detecting supported codecs..."->React.string}
+
+      <div className="space-y-1 px-1 pb-1">
+        <DropdownMenu.Label className="text-xs text-gray-400">
+          {"Render Engine"->React.string}
+        </DropdownMenu.Label>
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            onClick={_ => handleRenderModeChange(ClientRender)}
+            className={
+              "flex flex-col items-start px-3 py-2 rounded-lg border text-left transition-colors " ++
+              (settings.renderMode === ClientRender
+                ? "border-orange-500 bg-orange-500/10 text-white"
+                : "border-zinc-700 bg-zinc-800/50 text-zinc-300 hover:border-zinc-500")
+            }>
+            <span className="text-xs font-medium"> {"Browser"->React.string} </span>
+            <span className="text-[10px] text-gray-400 leading-tight mt-0.5">
+              {"WebCodecs, no upload"->React.string}
+            </span>
+          </button>
+          <button
+            onClick={_ => handleRenderModeChange(ServerRender)}
+            className={
+              "flex flex-col items-start px-3 py-2 rounded-lg border text-left transition-colors " ++
+              (settings.renderMode === ServerRender
+                ? "border-orange-500 bg-orange-500/10 text-white"
+                : "border-zinc-700 bg-zinc-800/50 text-zinc-300 hover:border-zinc-500")
+            }>
+            <span className="text-xs font-medium"> {"Server / FFmpeg"->React.string} </span>
+            <span className="text-[10px] text-gray-400 leading-tight mt-0.5">
+              {(hasProjectId ? "ASS subtitles, best quality" : "Will upload & render")->React.string}
+            </span>
+          </button>
         </div>
+        {if !hasProjectId && settings.renderMode === ServerRender {
+          <p className="text-[10px] text-gray-500 px-1 pt-1">
+            {"Video will be uploaded before rendering."->React.string}
+          </p>
+        } else {
+          React.null
+        }}
+      </div>
+
+      {if settings.renderMode === ClientRender {
+        <>
+          {if supportedCodecs.loading {
+            <div className="px-2 py-1 text-xs text-gray-400">
+              {"Detecting supported codecs..."->React.string}
+            </div>
+          } else {
+            React.null
+          }}
+          <DropdownMenu.Separator />
+          <FormatSelector selectedFormat=settings.format onFormatChange=handleFormatChange />
+          <DropdownMenu.Separator />
+          <VideoCodecSelector
+            selectedFormat=settings.format
+            selectedCodec=settings.videoCodec
+            onCodecChange=handleVideoCodecChange
+            browserSupportedCodecs=supportedCodecs.videoCodecs
+          />
+          <DropdownMenu.Separator />
+          <AudioCodecSelector
+            selectedFormat=settings.format
+            selectedCodec=settings.audioCodec
+            onCodecChange=handleAudioCodecChange
+            browserSupportedCodecs=supportedCodecs.audioCodecs
+          />
+          <DropdownMenu.Separator />
+        </>
       } else {
-        React.null
+        <>
+          <DropdownMenu.Separator />
+          <div className="px-3 py-2 text-xs text-gray-400 space-y-0.5">
+            <p> {"Output: MP4 (H.264 + AAC)"->React.string} </p>
+            <p> {"Quality: CRF 18 (visually lossless)"->React.string} </p>
+            <p> {"Subtitles: ASS burned in"->React.string} </p>
+          </div>
+          <DropdownMenu.Separator />
+        </>
       }}
-      <DropdownMenu.Separator />
-      <FormatSelector selectedFormat=settings.format onFormatChange=handleFormatChange />
-      <DropdownMenu.Separator />
-      <VideoCodecSelector
-        selectedFormat=settings.format
-        selectedCodec=settings.videoCodec
-        onCodecChange=handleVideoCodecChange
-        browserSupportedCodecs=supportedCodecs.videoCodecs
-      />
-      <DropdownMenu.Separator />
-      <AudioCodecSelector
-        selectedFormat=settings.format
-        selectedCodec=settings.audioCodec
-        onCodecChange=handleAudioCodecChange
-        browserSupportedCodecs=supportedCodecs.audioCodecs
-      />
-      <DropdownMenu.Separator />
+
       <div className="p-2">
         <button
           onClick={_ => handleRenderClick()}
-          disabled={supportedCodecs.loading}
+          disabled={settings.renderMode === ClientRender && supportedCodecs.loading}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-white bg-gradient-to-tr from-amber-500/90 via-orange-500/90 to-fuchsia-400/80 hover:from-orange-300/80 hover:to-fuchsia-200/80 focus-visible:!ring-white transition-all shadow-lg shadow-orange-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
-          {"Start rendering"->React.string}
+          {if settings.renderMode === ServerRender {
+            "Render on server"->React.string
+          } else {
+            "Start rendering"->React.string
+          }}
           <RenderIcon className="size-5" />
         </button>
       </div>
