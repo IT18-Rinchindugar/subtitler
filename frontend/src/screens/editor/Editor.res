@@ -182,6 +182,9 @@ let make = React.memo((
             style=mobileCanvasStyle
             className="absolute inset-0"
           />
+          <SubtitleOctopusPreview.make
+            cues=subtitlesManager.activeSubtitles
+          />
           <EditorCanvas
             transcriptionInProgress
             subtitles=subtitlesManager.activeSubtitles
@@ -338,6 +341,9 @@ let make = React.memo((
                   (),
                 )}
                 className="absolute inset-0"
+              />
+              <SubtitleOctopusPreview.make
+                cues=subtitlesManager.activeSubtitles
               />
               <EditorCanvas
                 transcriptionInProgress

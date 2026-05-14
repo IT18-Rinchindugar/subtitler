@@ -113,8 +113,8 @@ describe("generateAss", () => {
       expect(out).toContain("&H000000ff");
     });
 
-    it("converts outline color to ASS BGR format", () => {
-      const style: SubtitleStyle = { outlineColor: "#0000ff" }; // blue
+    it("converts strokeColor to ASS BGR format", () => {
+      const style: SubtitleStyle = { strokeColor: "#0000ff" }; // blue
       const out = generateAss(basicCues, style, 10);
       // blue: R=00 G=00 B=ff → BGR = 00ff0000
       expect(out).toContain("&H00ff0000");
@@ -132,19 +132,19 @@ describe("generateAss", () => {
       expect(out).toContain("Roboto");
     });
 
-    it("uses provided fontSize", () => {
-      const out = generateAss(basicCues, { fontSize: 48 }, 10);
+    it("uses provided fontSizePx", () => {
+      const out = generateAss(basicCues, { fontSizePx: 48 }, 10);
       expect(out).toMatch(/Style: Default,\w+,48,/);
     });
 
-    it("sets bold flag for fontWeight bold", () => {
-      const out = generateAss(basicCues, { fontWeight: "bold" }, 10);
+    it("sets bold flag for fontWeight >= 700", () => {
+      const out = generateAss(basicCues, { fontWeight: 700 }, 10);
       // bold = -1 in ASS
       expect(out).toMatch(/Style: Default,[^,]+,\d+,[^,]+,[^,]+,[^,]+,[^,]+,-1,/);
     });
 
-    it("sets bold flag for numeric fontWeight >= 700", () => {
-      const out = generateAss(basicCues, { fontWeight: 700 }, 10);
+    it("sets bold flag for fontWeight 800", () => {
+      const out = generateAss(basicCues, { fontWeight: 800 }, 10);
       expect(out).toMatch(/Style: Default,[^,]+,\d+,[^,]+,[^,]+,[^,]+,[^,]+,-1,/);
     });
 
@@ -154,29 +154,88 @@ describe("generateAss", () => {
     });
   });
 
-  describe("style: alignment", () => {
-    it("defaults to bottom-center (alignment 2)", () => {
+  describe("style: positioning via \\pos and \\an", () => {
+    it("emits \\pos tag with style.x and style.y coordinates", () => {
+      const style: SubtitleStyle = { x: 320, y: 540 };
+      const out = generateAss(basicCues, style, 10);
+      expect(out).toContain("\\pos(320,540)");
+    });
+
+    it("defaults \\pos to (0,0) when x/y not provided", () => {
       const out = generateAss(basicCues, {}, 10);
-      // Alignment is the 19th field (index 18) in the Style line
-      const styleLine = out.split("\n").find((l) => l.startsWith("Style:"))!;
-      const parts = styleLine.split(",");
-      expect(parts[18]).toBe("2");
+      expect(out).toContain("\\pos(0,0)");
     });
 
-    it("maps top-center to alignment 8", () => {
-      const style: SubtitleStyle = { verticalPosition: "top", alignment: "center" };
-      const out = generateAss(basicCues, style, 10);
-      const styleLine = out.split("\n").find((l) => l.startsWith("Style:"))!;
-      const parts = styleLine.split(",");
-      expect(parts[18]).toBe("8");
+    it("emits \\an8 for Center (default)", () => {
+      const out = generateAss(basicCues, {}, 10);
+      expect(out).toContain("\\an8");
     });
 
-    it("maps bottom-right to alignment 3", () => {
-      const style: SubtitleStyle = { verticalPosition: "bottom", alignment: "right" };
+    it("emits \\an7 for Left alignment", () => {
+      const style: SubtitleStyle = { align: "Left" };
       const out = generateAss(basicCues, style, 10);
+      expect(out).toContain("\\an7");
+    });
+
+    it("emits \\an9 for Right alignment", () => {
+      const style: SubtitleStyle = { align: "Right" };
+      const out = generateAss(basicCues, style, 10);
+      expect(out).toContain("\\an9");
+    });
+
+    it("emits \\q2 to disable libass word-wrapping", () => {
+      const out = generateAss(basicCues, {}, 10);
+      expect(out).toContain("\\q2");
+    });
+
+    it("global Style Alignment is always 7 (top-left anchor, overridden per-dialogue)", () => {
+      const out = generateAss(basicCues, {}, 10);
       const styleLine = out.split("\n").find((l) => l.startsWith("Style:"))!;
       const parts = styleLine.split(",");
-      expect(parts[18]).toBe("3");
+      expect(parts[18]).toBe("7");
+    });
+  });
+
+  describe("style: background", () => {
+    it("uses BorderStyle 3 and BackColour when showBackground is true", () => {
+      const style: SubtitleStyle = {
+        showBackground: true,
+        background: {
+          color: "#000000",
+          opacity: 0.8,
+          paddingX: 10,
+          paddingY: 5,
+          borderRadius: 4,
+          strokeWidth: 0,
+        },
+      };
+      const out = generateAss(basicCues, style, 10);
+      expect(out).toContain("Style: DefaultBg");
+      // BorderStyle 3 is field index 15 in the Style line
+      const bgLine = out.split("\n").find((l) => l.startsWith("Style: DefaultBg"))!;
+      expect(bgLine).toBeDefined();
+      const parts = bgLine.split(",");
+      expect(parts[15]).toBe("3");
+    });
+
+    it("uses DefaultBg style name in Dialogue lines when showBackground is true", () => {
+      const style: SubtitleStyle = {
+        showBackground: true,
+        background: { color: "#000000", opacity: 0.5, paddingX: 0, paddingY: 0, borderRadius: 0, strokeWidth: 0 },
+      };
+      const out = generateAss(basicCues, style, 10);
+      expect(out).toContain("Dialogue: 0,");
+      const dialogueLine = out.split("\n").find((l) => l.startsWith("Dialogue:"))!;
+      // Style field is the 4th comma-separated field (index 3)
+      const parts = dialogueLine.split(",");
+      expect(parts[3]).toBe("DefaultBg");
+    });
+
+    it("uses Default style name when showBackground is false", () => {
+      const out = generateAss(basicCues, { showBackground: false }, 10);
+      const dialogueLine = out.split("\n").find((l) => l.startsWith("Dialogue:"))!;
+      const parts = dialogueLine.split(",");
+      expect(parts[3]).toBe("Default");
     });
   });
 

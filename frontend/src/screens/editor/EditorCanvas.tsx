@@ -143,47 +143,54 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
       const actualWidth = calculateActualWidth(wordPositions, subtitleStyle.fontSizePx);
       return { width: actualWidth, height: totalHeight };
     }
-    
-    // For regular text, calculate from the text content
-    if (!currentSubtitle.trim()) {
-      return { width: 0, height: 0 };
-    }
-
+    if (!currentSubtitle.trim()) return { width: 0, height: 0 };
     const blockWidth = subtitleStyle.blockSize.width;
     const lineHeight = subtitleStyle.fontSizePx * 1.2;
-    
-    // Split text into words and calculate line wrapping
     const words = currentSubtitle.trim().split(/\s+/);
     const lines: string[] = [];
     let currentLine = "";
-    
     for (const word of words) {
       const testLine = currentLine ? `${currentLine} ${word}` : word;
-      const testWidth = measureText(testLine);
-      
-      if (testWidth > blockWidth && currentLine) {
+      if (measureText(testLine) > blockWidth && currentLine) {
         lines.push(currentLine);
         currentLine = word;
       } else {
         currentLine = testLine;
       }
     }
-    if (currentLine) {
-      lines.push(currentLine);
-    }
-    
-    // Find the widest line
+    if (currentLine) lines.push(currentLine);
     let maxWidth = 0;
-    for (const line of lines) {
-      const lineWidth = measureText(line);
-      maxWidth = Math.max(maxWidth, lineWidth);
-    }
-    
-    return {
-      width: maxWidth,
-      height: lines.length * lineHeight,
-    };
+    for (const line of lines) maxWidth = Math.max(maxWidth, measureText(line));
+    return { width: maxWidth, height: lines.length * lineHeight };
   }, [currentSubtitle, subtitleStyle.blockSize.width, subtitleStyle.fontSizePx, measureText, useWordAnimation, wordPositions]);
+
+  const backgroundDimensions = React.useMemo(() => {
+    const nodeWidth = actualTextDimensions.width || subtitleStyle.blockSize.width;
+    const nodeHeight = actualTextDimensions.height || subtitleStyle.fontSizePx * 1.2;
+    let bgX = subtitleStyle.x - subtitleStyle.background.paddingX;
+    if (subtitleStyle.align === "Center") {
+      bgX = subtitleStyle.x + (subtitleStyle.blockSize.width - nodeWidth) / 2 - subtitleStyle.background.paddingX;
+    } else if (subtitleStyle.align === "Right") {
+      bgX = subtitleStyle.x + subtitleStyle.blockSize.width - nodeWidth - subtitleStyle.background.paddingX;
+    }
+    return {
+      x: bgX,
+      y: subtitleStyle.y - subtitleStyle.background.paddingY,
+      width: nodeWidth + subtitleStyle.background.paddingX * 2,
+      height: nodeHeight + subtitleStyle.background.paddingY * 2,
+    };
+  }, [actualTextDimensions, subtitleStyle.x, subtitleStyle.y, subtitleStyle.align, subtitleStyle.background.paddingX, subtitleStyle.background.paddingY, subtitleStyle.blockSize.width, subtitleStyle.fontSizePx]);
+
+  const updateBackgroundPosition = React.useCallback(() => {
+    if (backgroundRef.current && subtitleStyle.showBackground) {
+      const node = useWordAnimation ? groupRef.current : textRef.current;
+      if (!node) return;
+      backgroundRef.current.setAttrs({
+        x: node.x() - subtitleStyle.background.paddingX,
+        y: node.y() - subtitleStyle.background.paddingY,
+      });
+    }
+  }, [subtitleStyle.background.paddingX, subtitleStyle.background.paddingY, subtitleStyle.showBackground, useWordAnimation]);
 
   React.useEffect(() => {
     const node = useWordAnimation ? groupRef.current : textRef.current;
@@ -208,38 +215,6 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
     subtitleStyle.blockSize.width,
   ]);
 
-  const backgroundDimensions = React.useMemo(() => {
-    // Use actual measured text dimensions for the background
-    const nodeWidth = actualTextDimensions.width || subtitleStyle.blockSize.width;
-    const nodeHeight = actualTextDimensions.height || subtitleStyle.fontSizePx * 1.2;
-    
-    // Calculate x position based on alignment
-    let bgX = subtitleStyle.x - subtitleStyle.background.paddingX;
-    if (subtitleStyle.align === "Center") {
-      // Center the background around the text center
-      bgX = subtitleStyle.x + (subtitleStyle.blockSize.width - nodeWidth) / 2 - subtitleStyle.background.paddingX;
-    } else if (subtitleStyle.align === "Right") {
-      // Align background to the right
-      bgX = subtitleStyle.x + subtitleStyle.blockSize.width - nodeWidth - subtitleStyle.background.paddingX;
-    }
-    
-    return {
-      x: bgX,
-      y: subtitleStyle.y - subtitleStyle.background.paddingY,
-      width: nodeWidth + subtitleStyle.background.paddingX * 2,
-      height: nodeHeight + subtitleStyle.background.paddingY * 2,
-    };
-  }, [
-    actualTextDimensions,
-    subtitleStyle.x,
-    subtitleStyle.y,
-    subtitleStyle.align,
-    subtitleStyle.background.paddingX,
-    subtitleStyle.background.paddingY,
-    subtitleStyle.blockSize.width,
-    subtitleStyle.fontSizePx,
-  ]);
-
   React.useEffect(() => {
     lineHelperXRef.current?.hide();
     lineHelperYRef.current?.hide();
@@ -252,22 +227,6 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
       transformerRef.current?.getLayer()?.batchDraw();
     }
   });
-
-  const updateBackgroundPosition = React.useCallback(() => {
-    if (backgroundRef.current && subtitleStyle.showBackground) {
-      const node = useWordAnimation ? groupRef.current : textRef.current;
-      if (!node) return;
-      backgroundRef.current.setAttrs({
-        x: node.x() - subtitleStyle.background.paddingX,
-        y: node.y() - subtitleStyle.background.paddingY,
-      });
-    }
-  }, [
-    subtitleStyle.background.paddingX,
-    subtitleStyle.background.paddingY,
-    subtitleStyle.showBackground,
-    useWordAnimation,
-  ]);
 
   function handleResize() {
     const node = useWordAnimation ? groupRef.current : textRef.current;

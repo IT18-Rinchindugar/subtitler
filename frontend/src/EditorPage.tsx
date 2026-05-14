@@ -29,7 +29,6 @@ import {
   renderApi,
   type ProjectDetail,
   type SubtitleCue,
-  type WordChunk,
 } from "./api/client";
 import { useAutoSave } from "./hooks/useAutoSave";
 import Constants from "./transcriber/Constants";
@@ -112,10 +111,16 @@ function StyleSyncBridge({
   const ctx = useEditorContext();
   const [style] = ctx.useStyle();
   React.useEffect(() => {
+    const fontFamily = (style as any).fontFamily as string | undefined;
+    const fontWeight = (style as any).fontWeight as number | undefined;
+    const _fontUrl = fontFamily && fontFamily !== "Virgil"
+      ? `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontFamily)}:wght@${fontWeight ?? 400}&display=swap`
+      : undefined;
     onStyle({
       ...(style as unknown as Record<string, unknown>),
       _videoWidth: ctx.videoMeta.width,
       _videoHeight: ctx.videoMeta.height,
+      ..._fontUrl ? { _fontUrl } : {},
     });
     onStyleVersion((v) => v + 1);
   }, [style]);
@@ -250,16 +255,6 @@ export default function EditorPage() {
     setMode({ type: "ready" });
   }
 
-  async function readAndPrepareAudioContext(blob: Blob): Promise<{ audioBuffer: AudioBuffer; audioCtx: AudioContext }> {
-    try {
-      const audioCtx = new AudioContext({ sampleRate: Constants.SAMPLING_RATE });
-      const arrayBuffer = await blob.arrayBuffer();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-      return { audioBuffer, audioCtx };
-    } catch (e) {
-      throw new UserFacingError("We couldn't find a decodable audio stream in your video", e);
-    }
-  }
 
   async function validateFileCodecSupported(file: File) {
     const worker = new RenderWorker();
@@ -330,8 +325,8 @@ export default function EditorPage() {
   // ── Subtitle state (server cues fed in; ReScript editor unchanged) ──────────
 
   const subtitlesManager = useChunksState(
-    serverCues,
-    false, // transcriptionInProgress = false — server already did the work
+    serverCues as unknown as import("./screens/editor/Subtitles.gen").subtitleCue[],
+    false,
     Constants.DEFAULT_CHUNK_THRESHOLD_CHARS,
   );
 
@@ -402,13 +397,13 @@ export default function EditorPage() {
               text: c.text,
               timestamp: c.timestamp,
             })),
-            styleJson: style as unknown as Record<string, unknown>,
+            styleJson: liveStyleJsonRef.current ?? (style as unknown as Record<string, unknown>),
           });
 
           const { jobId } = await renderApi.start(
             pid,
             cues,
-            style as unknown as Record<string, unknown>,
+            liveStyleJsonRef.current ?? (style as unknown as Record<string, unknown>),
           );
 
           const poll = async () => {
@@ -512,7 +507,7 @@ export default function EditorPage() {
           {
             type: "render",
             payload: {
-              style,
+              style: liveStyleJsonRef.current ?? (style as unknown as Record<string, unknown>),
               target,
               dataUri,
               canvas: offscreenCanvas,

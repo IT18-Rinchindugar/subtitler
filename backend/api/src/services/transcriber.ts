@@ -8,6 +8,9 @@ interface TranscribeJobPayload {
   internal_secret: string;
 }
 
+const MAX_RETRIES = 5;
+const RETRY_BASE_MS = 2000;
+
 export async function dispatchTranscriptionJob(
   projectId: string,
   s3Key: string,
@@ -25,13 +28,23 @@ export async function dispatchTranscriptionJob(
     internal_secret: config.internalSecret,
   };
 
-  const res = await fetch(`${config.transcriber.url}/transcribe`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Transcriber service error: ${res.status}`);
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, RETRY_BASE_MS * 2 ** (attempt - 1)));
+    }
+    try {
+      const res = await fetch(`${config.transcriber.url}/transcribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`Transcriber service error: ${res.status}`);
+      return;
+    } catch (err) {
+      lastError = err;
+      console.warn(`Transcription dispatch attempt ${attempt + 1} failed:`, err);
+    }
   }
+  throw lastError;
 }

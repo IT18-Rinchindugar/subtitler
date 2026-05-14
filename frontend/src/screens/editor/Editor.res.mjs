@@ -17,6 +17,7 @@ import * as EditorCanvas from "./EditorCanvas.res.mjs";
 import * as EditorContext from "./EditorContext.res.mjs";
 import * as UseEditorLayout from "../../hooks/useEditorLayout.res.mjs";
 import * as JsxRuntime from "react/jsx-runtime";
+import * as SubtitleOctopusPreview from "./SubtitleOctopusPreview.res.mjs";
 
 function a(prim) {
   return {};
@@ -223,6 +224,9 @@ var make$1 = React.memo(function (props) {
                                   height: ctx.videoMeta.height.toString(),
                                   width: ctx.videoMeta.width.toString()
                                 }, renderCanvasKey.toString()),
+                            JsxRuntime.jsx(SubtitleOctopusPreview.make, {
+                                  cues: subtitlesManager.activeSubtitles
+                                }),
                             JsxRuntime.jsx(EditorCanvas.make, {
                                   transcriptionInProgress: transcriptionInProgress,
                                   width: ctx.videoMeta.width,
@@ -408,6 +412,9 @@ var make$1 = React.memo(function (props) {
                                                         height: ctx.videoMeta.height.toString(),
                                                         width: ctx.videoMeta.width.toString()
                                                       }, renderCanvasKey.toString()),
+                                                  JsxRuntime.jsx(SubtitleOctopusPreview.make, {
+                                                        cues: subtitlesManager.activeSubtitles
+                                                      }),
                                                   JsxRuntime.jsx(EditorCanvas.make, {
                                                         transcriptionInProgress: transcriptionInProgress,
                                                         width: ctx.videoMeta.width,

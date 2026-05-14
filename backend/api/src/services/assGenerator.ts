@@ -5,17 +5,29 @@ export interface SubtitleCue {
 }
 
 export interface SubtitleStyle {
+  x?: number;
+  y?: number;
   fontFamily?: string;
-  fontSize?: number;
-  fontWeight?: string | number;
-  color?: string;       // hex like #ffffff
-  backgroundColor?: string;
-  outlineColor?: string;
-  outlineWidth?: number;
-  verticalPosition?: "top" | "center" | "bottom";
-  alignment?: "left" | "center" | "right";
+  fontWeight?: number;          // 100–900
+  fontSizePx?: number;
+  color?: string;               // hex
+  strokeColor?: string;
+  strokeWidth?: number;
+  align?: "Left" | "Center" | "Right";
+  blockSize?: { width: number; height: number };
+  showBackground?: boolean;
+  background?: {
+    color: string;
+    opacity: number;
+    paddingX: number;
+    paddingY: number;
+    borderRadius: number;
+    strokeColor?: string;
+    strokeWidth: number;
+  };
   _videoWidth?: number;
   _videoHeight?: number;
+  _fontUrl?: string;
 }
 
 function secondsToAssTime(secs: number): string {
@@ -34,37 +46,63 @@ function hexToAssBgr(hex: string): string {
   return `00${b}${g}${r}`;
 }
 
-function alignmentToAssInt(h: "left" | "center" | "right", v: "top" | "center" | "bottom"): number {
-  const col = h === "left" ? 1 : h === "center" ? 2 : 3;
-  const row = v === "bottom" ? 0 : v === "center" ? 3 : 6;
-  return col + row;
+function alignToAssAnchor(align?: string): number {
+  if (align === "Left") return 7;
+  if (align === "Right") return 9;
+  return 8; // Center default
 }
 
-export function generateAss(cues: SubtitleCue[], style: SubtitleStyle, videoDuration: number): string {
+export function generateAss(cues: SubtitleCue[], style: SubtitleStyle, _videoDuration: number): string {
   const fontName = style.fontFamily ?? "Arial";
-  const fontSize = style.fontSize ?? 32;
-  const bold = style.fontWeight === "bold" || Number(style.fontWeight) >= 700 ? -1 : 0;
+  const fontSize = style.fontSizePx ?? 32;
+  const bold = (style.fontWeight ?? 400) >= 700 ? -1 : 0;
   const primaryColor = `&H${hexToAssBgr(style.color ?? "#ffffff")}`;
-  const outlineColor = `&H${hexToAssBgr(style.outlineColor ?? "#000000")}`;
-  const outlineWidth = style.outlineWidth ?? 2;
-  const alignment = alignmentToAssInt(
-    (style.alignment as "left" | "center" | "right") ?? "center",
-    (style.verticalPosition as "top" | "center" | "bottom") ?? "bottom",
-  );
-  const marginV = alignment <= 3 ? 20 : 0; // bottom margin
+  const outlineColor = `&H${hexToAssBgr(style.strokeColor ?? "#000000")}`;
+  const outlineWidth = style.strokeWidth ?? 2;
+  const videoWidth = style._videoWidth ?? 1920;
+  const videoHeight = style._videoHeight ?? 1080;
+  const anAnchor = alignToAssAnchor(style.align);
+  const blockWidth = style.blockSize?.width ?? videoWidth;
+  // Konva stores x,y as top-left of the block. ASS \pos anchor depends on \an:
+  //   \an7 (Left)   → anchor is top-left   → posX = x
+  //   \an8 (Center) → anchor is top-center → posX = x + blockWidth/2
+  //   \an9 (Right)  → anchor is top-right  → posX = x + blockWidth
+  const rawX = style.x ?? 0;
+  const posX =
+    style.align === "Center" ? Math.round(rawX + blockWidth / 2) :
+    style.align === "Right"  ? Math.round(rawX + blockWidth) :
+    rawX;
+  const posY = style.y ?? 0;
+
+  let styleLines = `Style: Default,${fontName},${fontSize},${primaryColor},${primaryColor},${outlineColor},&H80000000,${bold},0,0,0,100,100,0,0,1,${outlineWidth},0,7,0,0,0,1`;
+
+  if (style.showBackground && style.background) {
+    const bg = style.background;
+    const alphaHex = Math.round((1 - bg.opacity) * 255).toString(16).padStart(2, "0");
+    const bgBgr = hexToAssBgr(bg.color);
+    const backColor = `&H${alphaHex}${bgBgr.slice(2)}`; // drop the leading "00" from hexToAssBgr
+    styleLines += `\nStyle: DefaultBg,${fontName},${fontSize},${primaryColor},${primaryColor},${outlineColor},${backColor},${bold},0,0,0,100,100,0,0,3,0,0,7,0,0,0,1`;
+  }
+
+  const styleName = style.showBackground && style.background ? "DefaultBg" : "Default";
 
   const header = `[Script Info]
 ScriptType: v4.00+
-PlayResX: ${style._videoWidth ?? 1920}
-PlayResY: ${style._videoHeight ?? 1080}
+PlayResX: ${videoWidth}
+PlayResY: ${videoHeight}
 ScaledBorderAndShadow: yes
+WrapStyle: 1
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${fontName},${fontSize},${primaryColor},${primaryColor},${outlineColor},&H80000000,${bold},0,0,0,100,100,0,0,1,${outlineWidth},0,${alignment},10,10,${marginV},1
+${styleLines}
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
+
+  // Margins confine WrapStyle wrapping to blockSize.width
+  const marginL = Math.max(0, rawX);
+  const marginR = Math.max(0, videoWidth - (rawX + blockWidth));
 
   const events = cues
     .filter((c) => c.endTime !== null && c.endTime !== undefined && c.endTime > c.startTime)
@@ -72,7 +110,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
       const start = secondsToAssTime(c.startTime);
       const end = secondsToAssTime(c.endTime as number);
       const text = c.text.replace(/\n/g, "\\N");
-      return `Dialogue: 0,${start},${end},Default,,0,0,0,,${text}`;
+      return `Dialogue: 0,${start},${end},${styleName},,${marginL},${marginR},0,,{\\an${anAnchor}\\pos(${posX},${posY})}${text}`;
     })
     .join("\n");
 

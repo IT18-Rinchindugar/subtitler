@@ -40,6 +40,11 @@ router.post("/:projectId", authenticate, validate(startSchema), async (req, res)
     return;
   }
 
+  console.log("project", project);
+
+  console.log("cues", cues);
+  console.log("style", style);
+
   const job = await prisma.renderJob.create({
     data: {
       projectId,
@@ -89,7 +94,7 @@ router.get("/:projectId/job/:jobId", authenticate, async (req, res) => {
 
 async function processRenderJob(
   jobId: string,
-  project: { id: string; videoS3Key: string; videoFilename: string; videoDuration: number | null },
+  project: { id: string; videoS3Key: string; videoFilename: string; videoDuration: number | null; videoWidth: number | null; videoHeight: number | null },
   rawCues: Array<{ text: string; startTime: number; endTime: number | null }>,
   style?: SubtitleStyle,
 ) {
@@ -110,26 +115,45 @@ async function processRenderJob(
       startTime: c.startTime,
       endTime: c.endTime,
     }));
-    const assContent = generateAss(cues, style ?? {}, project.videoDuration ?? 0);
+
+    const styleWithDimensions: SubtitleStyle = {
+      ...(style ?? {}),
+      _videoWidth: project.videoWidth ?? style?._videoWidth,
+      _videoHeight: project.videoHeight ?? style?._videoHeight,
+    };
+
+    // 2a. Download custom font so libass can render it correctly
+    const fontsDir = path.join(tmpDir, "fonts");
+    fs.mkdirSync(fontsDir);
+    if (style?._fontUrl) {
+      const fontExt = style._fontUrl.includes(".otf") ? ".otf" : ".ttf";
+      await downloadGoogleFont(style._fontUrl, path.join(fontsDir, `font${fontExt}`));
+    }
+
+    const assContent = generateAss(cues, styleWithDimensions, project.videoDuration ?? 0);
     const assPath = path.join(tmpDir, "subtitles.ass");
     fs.writeFileSync(assPath, assContent, "utf-8");
 
     // 3. Run FFmpeg: burn ASS subtitles into video
     const outputPath = path.join(tmpDir, "output.mp4");
     await new Promise<void>((resolve, reject) => {
-      // The lavfi/ass filter requires the path wrapped in single quotes.
-      // Escape backslashes (Windows) and single quotes inside the path.
       const escapedAssPath = assPath
         .replace(/\\/g, "/")
         .replace(/'/g, "\\'")
         .replace(/\[/g, "\\[")
         .replace(/\]/g, "\\]");
+      const escapedFontsDir = fontsDir
+        .replace(/\\/g, "/")
+        .replace(/'/g, "\\'");
       ffmpeg(videoPath)
-        .videoFilters(`ass='${escapedAssPath}'`)
+        .videoFilters(`ass='${escapedAssPath}':fontsdir='${escapedFontsDir}'`)
         .outputOptions([
           "-c:v libx264",
-          "-preset fast",
-          "-crf 18",
+          "-preset veryslow",
+          "-crf 14",
+          "-profile:v high",
+          "-level 4.1",
+          "-pix_fmt yuv420p",
           "-c:a copy",
           "-movflags +faststart",
         ])
@@ -162,6 +186,30 @@ async function processRenderJob(
     });
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+// Fetch a Google Fonts CSS URL, extract the first TTF/OTF url, download it to destPath.
+// Returns true on success, false if font could not be resolved (caller falls back to system font).
+async function downloadGoogleFont(cssUrl: string, destPath: string): Promise<boolean> {
+  try {
+    // Google Fonts returns woff2 by default; request a plain UA to get TTF urls
+    const cssRes = await fetch(cssUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    if (!cssRes.ok) return false;
+    const css = await cssRes.text();
+
+    const match = css.match(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+\.(?:ttf|otf))\)/);
+    if (!match) return false;
+
+    const fontRes = await fetch(match[1]);
+    if (!fontRes.ok) return false;
+    const buf = Buffer.from(await fontRes.arrayBuffer());
+    fs.writeFileSync(destPath, buf);
+    return true;
+  } catch {
+    return false;
   }
 }
 

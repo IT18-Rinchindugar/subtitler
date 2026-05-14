@@ -193,7 +193,7 @@ describe("full pipeline: cues → ASS file → FFmpeg filter", () => {
       { text: "Opening subtitle", startTime: 0.5, endTime: 3.0 },
       { text: "Closing subtitle", startTime: 8.0, endTime: 10.0 },
     ];
-    const style: SubtitleStyle = { fontFamily: "Helvetica", fontSize: 40, color: "#ffff00" };
+    const style: SubtitleStyle = { fontFamily: "Helvetica", fontSizePx: 40, color: "#ffff00" };
 
     const assContent = generateAss(cues, style, 12);
     const assPath = path.join(tmpDir, "subtitles.ass");
